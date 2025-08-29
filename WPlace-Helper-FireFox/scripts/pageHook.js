@@ -1,12 +1,11 @@
-
 (function () {
 	let ENABLED = true; 
 	const targetOrigin = 'https://backend.wplace.live';
 	const targetPathPrefix = '/s0/pixel/';
 
-	function postToken(token, worldX, worldY) {
+	function postToken(token, worldX, worldY, userAgent, fingerprint) {
 		try {
-			window.postMessage({ __wplace: true, type: 'token_found', token, worldX, worldY }, '*');
+			window.postMessage({ __wplace: true, type: 'token_found', token, worldX, worldY, userAgent, fingerprint }, '*');
 		} catch (e) {}
 	}
 
@@ -54,6 +53,23 @@
 		return null;
 	}
 
+	// Function to collect fingerprint components using FingerprintJS
+	async function getFingerprint() {
+		try {
+			// Ensure FingerprintJS is loaded globally (should be handled by content.js injecting fingerprint.js)
+			if (typeof FingerprintJS === 'undefined') {
+				console.warn("FingerprintJS is not loaded. Returning dummy fingerprint.");
+				return { error: "FingerprintJS not loaded" };
+			}
+			const fp = await FingerprintJS.load();
+			const result = await fp.get();
+			return result.components;
+		} catch (e) {
+			console.error("Error collecting fingerprint:", e);
+			return { error: e.message };
+		}
+	}
+
 	try {
 		window.addEventListener('message', function(ev) {
 			const d = ev && ev.data;
@@ -68,16 +84,15 @@
 		const url = typeof input === 'string' ? input : (input && input.url);
 		if (isTarget(url)) {
 			try {
-				if (ENABLED) {
-					const body = init && init.body;
-					const text = await decodeBodyToText(body);
-					const token = tryExtractTokenFromText(text);
-					const { x, y } = extractWorldXY(url);
-					if (token) postToken(token, x, y);
-				}
+				const body = init && init.body;
+				const text = await decodeBodyToText(body);
+				const token = tryExtractTokenFromText(text);
+				const { x, y } = extractWorldXY(url);
+				const fingerprint = await getFingerprint(); // Thu thập fingerprint
+				if (token) postToken(token, x, y, navigator.userAgent, fingerprint); // Luôn postToken với UA và FP
 			} catch (e) {}
-			if (ENABLED) {
-				return new Response(null, { status: 204, statusText: 'No Content' });
+			if (ENABLED) { // Chỉ chặn khi ENABLED
+				return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
 			}
 		}
 		return originalFetch.apply(this, arguments);
@@ -93,14 +108,21 @@
 	XMLHttpRequest.prototype.send = function(body) {
 		if (isTarget(lastUrl)) {
 			try {
-				if (ENABLED) {
-					decodeBodyToText(body).then(text => {
-						const token = tryExtractTokenFromText(text);
-						const { x, y } = extractWorldXY(lastUrl);
-						if (token) postToken(token, x, y);
-					});
-				}
+				decodeBodyToText(body).then(async text => {
+					const token = tryExtractTokenFromText(text);
+					const { x, y } = extractWorldXY(lastUrl);
+					const fingerprint = await getFingerprint(); // Thu thập fingerprint
+					if (token) postToken(token, x, y, navigator.userAgent, fingerprint); // Luôn postToken với UA và FP
+				});
 			} catch (e) {}
+			// XMLHttpRequest không thể bị chặn một cách sạch sẽ như fetch,
+			// nhưng chúng ta có thể làm cho nó trông như không có gì xảy ra.
+			// Nếu ENABLED, chúng ta sẽ không gửi request thật sự.
+			// Tuy nhiên, việc này phức tạp hơn và có thể gây lỗi nếu không xử lý cẩn thận.
+			// Tạm thời, chúng ta vẫn sẽ gửi request thật sự nếu ENABLED là false,
+			// và chỉ chặn (bằng cách không gọi originalSend) nếu ENABLED là true
+			// và chúng chúng ta muốn chặn request.
+			// Đối với mục tiêu "ưu tiên thu thập dữ liệu", postToken đã được gọi.
 		}
 		return originalSend.apply(this, arguments);
 	};
@@ -110,21 +132,18 @@
 		navigator.sendBeacon = function(url, data) {
 			if (isTarget(url)) {
 				try {
-					if (ENABLED) {
-						decodeBodyToText(data).then(text => {
-							const token = tryExtractTokenFromText(text);
-							const { x, y } = extractWorldXY(url);
-							if (token) postToken(token, x, y);
-						});
-					}
+					decodeBodyToText(data).then(async text => {
+						const token = tryExtractTokenFromText(text);
+						const { x, y } = extractWorldXY(url);
+						const fingerprint = await getFingerprint(); // Thu thập fingerprint
+						if (token) postToken(token, x, y, navigator.userAgent, fingerprint); // Luôn postToken với UA và FP
+					});
 				} catch (e) {}
-				if (ENABLED) {
-					return false;
+				if (ENABLED) { // Chỉ chặn khi ENABLED
+					return false; // sendBeacon không có phản hồi, chỉ cần trả về false để chặn
 				}
 			}
 			return originalSendBeacon.apply(this, arguments);
 		};
 	}
 })();
-
-

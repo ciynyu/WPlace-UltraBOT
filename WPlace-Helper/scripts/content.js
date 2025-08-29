@@ -1,4 +1,6 @@
 
+console.log("[WPlace-Helper] content.js loaded.");
+
 (function injectPageHook() {
 	try {
 		const s = document.createElement('script');
@@ -38,4 +40,9 @@ window.addEventListener('message', function(ev) {
 	} catch (e) {}
 })();
 
-
+// Gửi message đến background script khi content script được tải
+try {
+	chrome.runtime.sendMessage({ type: 'wplace_content_script_loaded' });
+} catch (e) {
+	console.warn("[WPlace-Helper] Failed to send 'content_script_loaded' message:", e);
+}

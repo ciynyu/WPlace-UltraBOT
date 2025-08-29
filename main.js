@@ -4,10 +4,56 @@ const http = require('http');
 const https = require('https');
 const zlib = require('zlib');
 const url = require('url');
+/*
+const { Worker } = require('worker_threads');
+*/
 let axios; try { axios = require('axios'); } catch (e) { axios = null; }
-let puppeteer; try { puppeteer = require('puppeteer'); } catch (e) { puppeteer = null; }
+let puppeteer; try { puppeteer = require('puppeteer-extra'); } catch (e) { puppeteer = null; } // Sử dụng puppeteer-extra
+let stealth; try { stealth = require('puppeteer-extra-plugin-stealth'); } catch (e) { stealth = null; } // Thêm stealth plugin
 
-let DEBUG = !!(process.env.DEBUG_HTTP && String(process.env.DEBUG_HTTP) !== '0');
+const UserAgent = require('user-agents'); // Import user-agents
+const { FingerprintGenerator } = require('fingerprint-generator'); // Import fingerprint-generator
+
+// Hàm utility để phân tích User-Agent string
+function parseUserAgent(uaString) {
+    let browser = { name: 'unknown', version: 0 };
+    let os = { name: 'unknown', version: 0 };
+
+    if (!uaString) return { browser, os };
+
+    // Detect OS
+    if (uaString.includes('Windows NT 10.0')) {
+        os = { name: 'windows', version: 10 };
+    } else if (uaString.includes('Windows NT 6.3')) {
+        os = { name: 'windows', version: 8.1 };
+    } else if (uaString.includes('Windows NT 6.2')) {
+        os = { name: 'windows', version: 8 };
+    } else if (uaString.includes('Macintosh; Intel Mac OS X')) {
+        const osVersionMatch = uaString.match(/Mac OS X (\d+)_(\d+)(?:_(\d+))?/);
+        if (osVersionMatch) {
+            os = { name: 'macos', version: parseFloat(`${osVersionMatch[1]}.${osVersionMatch[2]}`) };
+        }
+    } else if (uaString.includes('Linux')) {
+        os = { name: 'linux', version: 0 }; // Không có phiên bản cụ thể dễ dàng từ UA Linux
+    }
+
+    // Detect Browser
+    if (uaString.includes('Chrome') && !uaString.includes('Edge')) {
+        const versionMatch = uaString.match(/Chrome\/(\d+)\./);
+        if (versionMatch) browser = { name: 'chrome', version: parseInt(versionMatch[1], 10) };
+    } else if (uaString.includes('Firefox')) {
+        const versionMatch = uaString.match(/Firefox\/(\d+)\./);
+        if (versionMatch) browser = { name: 'firefox', version: parseInt(versionMatch[1], 10) };
+    } else if (uaString.includes('Edge')) {
+        const versionMatch = uaString.match(/Edge\/(\d+)\./);
+        if (versionMatch) browser = { name: 'edge', version: parseInt(versionMatch[1], 10) };
+    }
+
+    return { browser, os };
+}
+
+
+let DEBUG = true; // Mặc định bật debug
 let DEBUG_MASK = !(process.env.DEBUG_MASK === '0' || process.env.DEBUG_MASK === 'false');
 function enableDebug() { DEBUG = true; }
 function enableDebugFull() { DEBUG = true; DEBUG_MASK = false; }
@@ -17,6 +63,80 @@ function maskToken(str) {
   if (s.length <= 8) return '***';
   return s.slice(0, 4) + '…' + s.slice(-4);
 }
+function debugLog(type, ...args) { if (DEBUG) { try { console.log(`[debug][${(new Date()).toISOString()}] [${type}]`, ...args); } catch {} } }
+module.exports.debugLog = debugLog; // Export debugLog
+
+// Hàm tạo User-Agent và Fingerprint ngẫu nhiên và đồng bộ
+function generateAntiDetectionParams() {
+    try {
+        const osOptions = [
+            { name: 'Windows', minVersion: 10 }, // Windows 10 trở lên
+            { name: 'Mac OS X', minVersion: 10.15 }, // macOS Catalina (10.15) trở lên
+            { name: 'Linux' }
+        ];
+        const browserOptions = ['Chrome', 'Firefox', 'Edge'];
+
+        // Tạo User-Agent
+        const userAgentGenerator = new UserAgent({
+            deviceCategory: 'desktop',
+            os: osOptions,
+            browser: browserOptions,
+            // user-agents sẽ tự chọn phiên bản gần nhất nếu không chỉ định rõ
+        });
+        const newUserAgent = userAgentGenerator.toString();
+
+        if (!newUserAgent) {
+            debugLog('ERROR', 'Failed to generate User-Agent.');
+            return null;
+        }
+
+        // Phân tích User-Agent để lấy thông tin cho Fingerprint Generator
+        const parsedUAInfo = parseUserAgent(newUserAgent);
+
+        // Kiểm tra xem parseUserAgent có trả về thông tin hợp lệ không
+        if (!parsedUAInfo.browser.name || parsedUAInfo.browser.version === 0 || !parsedUAInfo.os.name) {
+            debugLog('ERROR', 'Failed to parse User-Agent for fingerprint generation:', newUserAgent);
+            return null;
+        }
+
+        // Xác định phiên bản trình duyệt và hệ điều hành cho fingerprint-generator
+        // Đảm bảo không quá cũ và đồng bộ với User-Agent
+        const browserConfig = {
+            name: parsedUAInfo.browser.name,
+            minVersion: Math.max(parsedUAInfo.browser.version - 2, 80), // Đảm bảo phiên bản không quá cũ (ví dụ: > 80)
+            maxVersion: parsedUAInfo.browser.version
+        };
+
+        let osConfig;
+        if (parsedUAInfo.os.name === 'windows') {
+            osConfig = { name: 'windows', minVersion: parsedUAInfo.os.version, maxVersion: parsedUAInfo.os.version };
+        } else if (parsedUAInfo.os.name === 'macos') {
+            osConfig = { name: 'macos', minVersion: parsedUAInfo.os.version, maxVersion: parsedUAInfo.os.version };
+        } else { // linux
+            osConfig = { name: 'linux' }; // fingerprint-generator tự xử lý phiên bản Linux
+        }
+
+        const fingerprintGen = new FingerprintGenerator({
+            browsers: [browserConfig],
+            operatingSystems: [osConfig],
+            devices: ['desktop'],
+            // Các tham số khác có thể thêm để tạo fingerprint chi tiết hơn nếu cần
+        });
+        const { fingerprint: newFingerprint, headers: newHeaders } = fingerprintGen.getFingerprint({
+            userAgent: newUserAgent // Sử dụng chính User-Agent đã tạo để đảm bảo đồng bộ
+        });
+
+        if (!newFingerprint) {
+            debugLog('ERROR', 'Failed to generate Fingerprint.');
+            return null;
+        }
+
+        return { userAgent: newUserAgent, fingerprint: newFingerprint, headers: newHeaders };
+    } catch (e) {
+        debugLog('CRITICAL', 'Exception during anti-detection params generation:', e.message);
+        return null; // Trả về null nếu có lỗi
+    }
+}
 function maskCookieHeader(cookieHeader) {
   if (!cookieHeader) return '';
   if (!DEBUG_MASK) return String(cookieHeader);
@@ -25,7 +145,6 @@ function maskCookieHeader(cookieHeader) {
   out = out.replace(/\bj=([^;]+)/i, (_, v) => `j=${maskToken(v)}`);
   return out;
 }
-function debugLog(...args) { if (DEBUG) { try { console.log('[debug]', ...args); } catch {} } }
 
 const HTTPS_AGENT = new https.Agent({ secureProtocol: 'TLSv1_2_method' });
 let axiosClient = null;
@@ -40,7 +159,7 @@ if (axios) {
         headers.Cookie = masked;
         headers.cookie = masked;
       }
-      debugLog('HTTP GET', { url: config && config.url, headers });
+      debugLog('OUTBOUND', 'HTTP GET', { url: config && config.url, headers });
     } catch {}
     return config;
   });
@@ -52,7 +171,7 @@ if (axios) {
       else {
         try { preview = JSON.stringify(data).slice(0, 300); } catch { preview = String(data).slice(0, 300); }
       }
-      debugLog('HTTP GET response', {
+      debugLog('OUTBOUND_RESPONSE', 'HTTP GET response', {
         url: response && response.config && response.config.url,
         status: response && response.status,
         statusText: response && response.statusText,
@@ -69,13 +188,13 @@ if (axios) {
         else {
           try { preview = JSON.stringify(data).slice(0, 300); } catch { preview = String(data).slice(0, 300); }
         }
-        debugLog('HTTP GET error', {
+        debugLog('OUTBOUND_ERROR', 'HTTP GET error', {
           url: error.response && error.response.config && error.response.config.url,
           status: error.response && error.response.status,
           bodyPreview: preview
         });
       } else {
-        debugLog('HTTP GET network error', { message: error && error.message ? error.message : String(error) });
+        debugLog('OUTBOUND_ERROR', 'HTTP GET network error', { message: error && error.message ? error.message : String(error) });
       }
     } catch {}
     return Promise.reject(error);
@@ -98,20 +217,12 @@ const DB_DIR = path.resolve(process.cwd(), 'db');
 const ACCOUNTS_FILE = path.join(DB_DIR, 'accounts.json');
 const SETTINGS_FILE = path.join(DB_DIR, 'settings.json');
 const FAVORITES_FILE = path.join(DB_DIR, 'favorites.json');
-
-function ensureDb() {
-  try { fs.mkdirSync(DB_DIR, { recursive: true }); } catch {}
-  if (!fs.existsSync(ACCOUNTS_FILE)) {
-    try { fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify([], null, 2)); } catch {}
-  }
-  if (!fs.existsSync(SETTINGS_FILE)) {
-    try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ cf_clearance: '', worldX: null, worldY: null }, null, 2)); } catch {}
-  }
-  if (!fs.existsSync(FAVORITES_FILE)) {
-    try { fs.writeFileSync(FAVORITES_FILE, JSON.stringify([], null, 2)); } catch {}
-  }
-}
-
+/*
+const { AccountManager, readJson: readJsonFromAM, writeJson: writeJsonFromAM, deactivateAccountByToken: deactivateByAM } = require('./accountManager.js');
+const WorkerPool = require('./workerPool.js');
+const accountManager = new AccountManager();
+const workerPool = new WorkerPool(5, path.join(__dirname, 'worker.js'));
+*/
 function readJson(filePath, fallback) {
   try {
     const raw = fs.readFileSync(filePath, 'utf8');
@@ -120,10 +231,52 @@ function readJson(filePath, fallback) {
     return fallback;
   }
 }
-
 function writeJson(filePath, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
+
+
+// Original definitions for ACCOUNTS_FILE, readJson, writeJson, deactivateAccountByToken before refactor
+/*
+
+
+
+
+*/
+
+//const { AccountManager, readJson, writeJson, deactivateAccountByToken } = require('./accountManager.js');
+//const WorkerPool = require('./workerPool.js'); // Import WorkerPool
+
+//const accountManager = new AccountManager();
+//const workerPool = new WorkerPool(5, path.join(__dirname, 'worker.js')); // Initialize WorkerPool with 5 workers, pointing to worker.js
+
+function ensureDb() {
+  try { fs.mkdirSync(DB_DIR, { recursive: true }); } catch {}
+  if (!fs.existsSync(ACCOUNTS_FILE)) {
+    try { fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify([], null, 2)); } catch {}
+  }
+  if (!fs.existsSync(SETTINGS_FILE)) {
+    try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ cf_clearance: '', worldX: null, worldY: null, updateIntervalMinutes: 5, enableAntiDetection: false }, null, 2)); } catch {}
+  } else {
+    // Migrate old settings.json to include updateIntervalMinutes and enableAntiDetection if missing
+    try {
+      const settings = readJson(SETTINGS_FILE, {});
+      if (settings.updateIntervalMinutes == null) {
+        settings.updateIntervalMinutes = 5; // Default value
+        writeJson(SETTINGS_FILE, settings);
+      }
+      if (settings.enableAntiDetection == null) { // Add new setting for anti-detection toggle
+        settings.enableAntiDetection = false; // Default to false
+        writeJson(SETTINGS_FILE, settings);
+      }
+    } catch {}
+  }
+
+  if (!fs.existsSync(FAVORITES_FILE)) {
+    try { fs.writeFileSync(FAVORITES_FILE, JSON.stringify([], null, 2)); } catch {}
+  }
+}
+
 // Simple SSE hub for live events from extension → UI
 const sseClients = new Set();
 function sseBroadcast(eventName, payload) {
@@ -138,6 +291,9 @@ function sseBroadcast(eventName, payload) {
   } catch {}
 }
 
+
+// deactivateAccountByToken is now in accountManager.js
+// Original deactivateAccountByToken function - kept for reference
 
 function deactivateAccountByToken(jToken) {
   try {
@@ -185,13 +341,14 @@ async function requestMeLikePython(opts) {
   const options = {
     url: 'https://backend.wplace.live/me',
     headers: {
+      'User-Agent': opts.userAgent || 'Mozilla/5.0', // Sử dụng userAgent từ opts
       'Cookie': cookieHeader
     },
     decompress: false,
     timeout: { request: 30000 },
     agent: { https: HTTPS_AGENT }
   };
-  debugLog('HTTP GET begin', {
+  debugLog('OUTBOUND', 'HTTP GET begin', {
     host: 'backend.wplace.live',
     path: '/me',
     headers: { Cookie: maskCookieHeader(cookieHeader) }
@@ -211,19 +368,39 @@ async function requestMeLikePython(opts) {
     console.log(`HTTP ${status} ${reason}`);
     try { console.log(bodyBuf.toString('utf8')); } catch { console.log(bodyBuf); }
   }
-  debugLog('HTTP GET end', { status, reason, bodyPreview: bodyBuf.toString('utf8').slice(0, 300) });
+  debugLog('OUTBOUND_RESPONSE', 'HTTP GET end', { status, reason, bodyPreview: bodyBuf.toString('utf8').slice(0, 300) });
   return { status, reason, body: bodyBuf.toString('utf8') };
 }
 
 
-async function fetchMeAxios(cf_clearance, token) {
+async function fetchMeAxios(cf_clearance, token, userAgent = 'Mozilla/5.0') {
   if (!axios) return null;
+  const globalSettings = readJson(SETTINGS_FILE, {});
+  const enableAntiDetection = globalSettings.enableAntiDetection || false;
+  let currentAccountUserAgent = userAgent;
+
+  // Lấy User-Agent đã lưu cho tài khoản nếu enableAntiDetection bật
+  if (enableAntiDetection) {
+    const accounts = readJson(ACCOUNTS_FILE, []);
+    const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === token);
+    if (acc && acc.userAgent) {
+      currentAccountUserAgent = acc.userAgent;
+    }
+  }
+  /*
+  if (enableAntiDetection) {
+    const acc = accountManager.findAccountByToken(token);
+    if (acc && acc.userAgent) {
+      currentAccountUserAgent = acc.userAgent;
+    }
+  }
+*/
   const headers = {
-    'User-Agent': 'Mozilla/5.0',
+    'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
     'Accept': 'application/json, text/plain, */*',
     'Cookie': `cf_clearance=${cf_clearance || ''}; j=${token || ''}`
   };
-  debugLog('axios GET /me', { headers: { ...headers, Cookie: maskCookieHeader(headers.Cookie) } });
+  debugLog('OUTBOUND', 'axios GET /me', { headers: { ...headers, Cookie: maskCookieHeader(headers.Cookie) } });
   const resp = await axiosClient.get('https://backend.wplace.live/me', { headers });
   if (!resp || resp.status !== 200) return null;
   const data = resp.data;
@@ -231,23 +408,179 @@ async function fetchMeAxios(cf_clearance, token) {
   try { return JSON.parse(String(data || '')); } catch { return null; }
 }
 
-async function fetchMe(cf_clearance, token) {
-  debugLog('GET /me via got-scraping (requestMeLikePython)');
-  const r = await requestMeLikePython({ cf_clearance, j: token, silent: true });
+async function fetchMe(cf_clearance, token, userAgent = 'Mozilla/5.0') {
+  const globalSettings = readJson(SETTINGS_FILE, {});
+  const enableAntiDetection = globalSettings.enableAntiDetection || false;
+  let currentAccountUserAgent = userAgent;
+
+  // Lấy User-Agent đã lưu cho tài khoản nếu enableAntiDetection bật
+  if (enableAntiDetection) {
+    const accounts = readJson(ACCOUNTS_FILE, []);
+    const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === token);
+    if (acc && acc.userAgent) {
+      currentAccountUserAgent = acc.userAgent;
+      if (!currentAccountUserAgent || typeof currentAccountUserAgent !== 'string') {
+        debugLog('WARNING', `Invalid User-Agent found for account ${acc.id}. Using default.`);
+        currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
+      }
+    } else {
+      debugLog('INFO', `Anti-detection enabled but no custom User-Agent for account ${acc ? acc.id : token}. Using default.`);
+      currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default if anti-detection enabled but no custom UA
+    }
+  }
+  /*
+  if (enableAntiDetection) {
+    const acc = accountManager.findAccountByToken(token);
+    if (acc) {
+      if (acc.userAgent) {
+        currentAccountUserAgent = acc.userAgent;
+        if (!currentAccountUserAgent || typeof currentAccountUserAgent !== 'string') {
+          debugLog('WARNING', `Invalid User-Agent found for account ${acc.id}. Using default.`);
+          currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
+        }
+      } else {
+        debugLog('INFO', `Anti-detection enabled but no custom User-Agent for account ${acc.id}. Using default.`);
+        currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default if anti-detection enabled but no custom UA
+      }
+    }
+  }
+  */
+  debugLog('OUTBOUND', 'GET /me via got-scraping (requestMeLikePython)');
+  const r = await requestMeLikePython({ cf_clearance, j: token, silent: true, userAgent: currentAccountUserAgent });
   if (!r || r.status !== 200 || !r.body) return null;
   try { return JSON.parse(r.body); } catch { return null; }
 }
 
-async function fetchMePuppeteer(cf_clearance, token) {
+async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', fingerprint = null) {
   if (!puppeteer) return null;
+  const globalSettings = readJson(SETTINGS_FILE, {});
+  const enableAntiDetection = globalSettings.enableAntiDetection || false;
+  let currentAccountUserAgent = userAgent;
+  let currentAccountFingerprint = fingerprint;
+
+  // Lấy User-Agent và Fingerprint đã lưu cho tài khoản nếu enableAntiDetection bật
+/*  if (enableAntiDetection) {
+    const acc = accountManager.findAccountByToken(token);
+    if (acc) {
+      if (acc.userAgent) {
+        currentAccountUserAgent = acc.userAgent;
+        if (!currentAccountUserAgent || typeof currentAccountUserAgent !== 'string') {
+          debugLog('WARNING', `Invalid User-Agent found for account ${acc.id} in Puppeteer context. Using default.`);
+          currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
+        }
+      } else {
+        debugLog('INFO', `Anti-detection enabled but no custom User-Agent for account ${acc.id} in Puppeteer context. Using default.`);
+        currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
+      }
+*/
+  // Lấy User-Agent và Fingerprint đã lưu cho tài khoản nếu enableAntiDetection bật
+  if (enableAntiDetection) {
+    const accounts = readJson(ACCOUNTS_FILE, []);
+    const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === token);
+    if (acc) {
+      if (acc.userAgent) {
+        currentAccountUserAgent = acc.userAgent;
+        if (!currentAccountUserAgent || typeof currentAccountUserAgent !== 'string') {
+          debugLog('WARNING', `Invalid User-Agent found for account ${acc.id} in Puppeteer context. Using default.`);
+          currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
+        }
+      } else {
+        debugLog('INFO', `Anti-detection enabled but no custom User-Agent for account ${acc.id} in Puppeteer context. Using default.`);
+        currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
+      }
+
+      if (acc.fingerprint) {
+        currentAccountFingerprint = acc.fingerprint;
+        if (!currentAccountFingerprint || typeof currentAccountFingerprint !== 'object' || Object.keys(currentAccountFingerprint).length === 0) {
+          debugLog('WARNING', `Invalid Fingerprint found for account ${acc.id} in Puppeteer context. Ignoring.`);
+          currentAccountFingerprint = null; // Ignore invalid fingerprint
+        }
+      } else {
+        debugLog('INFO', `Anti-detection enabled but no custom Fingerprint for account ${acc.id} in Puppeteer context. Ignoring.`);
+        currentAccountFingerprint = null; // Ignore if anti-detection enabled but no custom FP
+      }
+    }
+  }
+
+  // Sử dụng stealth plugin với các tùy chỉnh từ fingerprint
+  if (stealth) {
+    puppeteer.use(stealth({
+      // Hiện tại, stealth plugin tự động xử lý nhiều khía cạnh của fingerprinting.
+      // Các thuộc tính cụ thể từ `currentAccountFingerprint` có thể được dùng để tinh chỉnh nếu cần
+      // và nếu stealth plugin có các tùy chọn tương ứng (ví dụ: webgl, canvas)
+    }));
+  }
+
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
   try {
     const page = await browser.newPage();
+    await page.setUserAgent(currentAccountUserAgent); // Đặt User-Agent
+
+    // Cố gắng mô phỏng fingerprint nếu có và hợp lệ
+    if (currentAccountFingerprint) {
+      // Đặt viewport nếu có screenResolution
+      if (currentAccountFingerprint.screenResolution && currentAccountFingerprint.screenResolution.value) {
+        await page.setViewport({
+          width: currentAccountFingerprint.screenResolution.value.width,
+          height: currentAccountFingerprint.screenResolution.value.height
+        }).catch(e => debugLog('WARNING', `Could not set viewport: ${e.message}`));
+      }
+
+      // Mô phỏng các thuộc tính navigator khác (ví dụ: languages, platform, plugins)
+      await page.evaluateOnNewDocument((fp) => {
+        if (fp.languages && fp.languages.value) {
+          Object.defineProperty(navigator, 'languages', {
+            get: () => fp.languages.value,
+          });
+        }
+        if (fp.platform && fp.platform.value) {
+          Object.defineProperty(navigator, 'platform', {
+            get: () => fp.platform.value,
+          });
+        }
+        // Thêm các thuộc tính khác nếu cần (ví dụ: vendor, appVersion, deviceMemory, hardwareConcurrency)
+        // Lưu ý: một số thuộc tính có thể được xử lý tốt hơn bởi stealth plugin
+      }, currentAccountFingerprint);
+    }
+    
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      debugLog('OUTBOUND_PUPPETEER_REQUEST', `${request.method()} ${request.url()}`, {
+        headers: {
+          ...request.headers(),
+          Cookie: maskCookieHeader(request.headers().cookie || request.headers().Cookie || '')
+        },
+        postData: request.postData()
+      });
+      request.continue();
+    });
+    page.on('response', async (response) => {
+      try {
+        const url = response.url();
+        const status = response.status();
+        const headers = response.headers();
+        let bodyPreview = '';
+        try {
+          const text = await response.text();
+          bodyPreview = text.slice(0, 300);
+        } catch (e) {
+          bodyPreview = `Không thể đọc body: ${e.message}`;
+        }
+        debugLog('OUTBOUND_PUPPETEER_RESPONSE', `Response for ${response.request().method()} ${url}`, {
+          status,
+          headers,
+          bodyPreview
+        });
+      } catch (e) {
+        debugLog('OUTBOUND_PUPPETEER_RESPONSE_ERROR', `Error logging puppeteer response: ${e.message}`);
+      }
+    });
+
     const cookies = [];
     if (cf_clearance) cookies.push({ name: 'cf_clearance', value: String(cf_clearance), domain: 'backend.wplace.live', path: '/', httpOnly: false, secure: true });
     if (token) cookies.push({ name: 'j', value: String(token), domain: 'backend.wplace.live', path: '/', httpOnly: false, secure: true });
     if (cookies.length) await page.setCookie(...cookies);
-    debugLog('puppeteer GET /me with cookies set');
+    debugLog('OUTBOUND', 'puppeteer GET /me with cookies set');
     const res = await page.goto('https://backend.wplace.live/me', { waitUntil: 'networkidle2', timeout: 20000 });
     if (!res || res.status() !== 200) return null;
     const text = await page.evaluate(() => document.body && document.body.innerText || '');
@@ -257,8 +590,27 @@ async function fetchMePuppeteer(cf_clearance, token) {
   }
 }
 
-async function purchaseProduct(cf_clearance, token, productId, amount) {
+async function purchaseProduct(cf_clearance, token, productId, amount, userAgent = 'Mozilla/5.0') {
   const payload = JSON.stringify({ product: { id: productId, amount } });
+  const globalSettings = readJson(SETTINGS_FILE, {});
+  const enableAntiDetection = globalSettings.enableAntiDetection || false;
+  let currentAccountUserAgent = userAgent;
+
+  // Lấy User-Agent đã lưu cho tài khoản nếu enableAntiDetection bật
+  if (enableAntiDetection) {
+    const accounts = readJson(ACCOUNTS_FILE, []);
+    const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === token);
+    if (acc && acc.userAgent) {
+      currentAccountUserAgent = acc.userAgent;
+    }
+  }
+/*  if (enableAntiDetection) {
+    const acc = accountManager.findAccountByToken(token);
+    if (acc && acc.userAgent) {
+      currentAccountUserAgent = acc.userAgent;
+    }
+  }
+*/
   try {
     const gotScraping = await getGotScrapingFn();
     if (gotScraping) {
@@ -266,7 +618,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount) {
         url: 'https://backend.wplace.live/purchase',
         method: 'POST',
         headers: {
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
           'Accept': 'application/json, text/plain, */*',
           'Origin': 'https://wplace.live',
           'Referer': 'https://wplace.live/',
@@ -297,7 +649,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount) {
         path: '/purchase',
         method: 'POST',
         headers: {
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
           'Accept': 'application/json, text/plain, */*',
           'Origin': 'https://wplace.live',
           'Referer': 'https://wplace.live/',
@@ -328,9 +680,33 @@ async function purchaseProduct(cf_clearance, token, productId, amount) {
 }
 
 function startServer(port, host) {
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => { // Thêm async ở đây
     const parsed = url.parse(req.url, true);
     ensureDb();
+    // Endpoint mới để kiểm tra trạng thái của server
+    if (parsed.pathname === '/api/status' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', debugMode: DEBUG, debugMask: DEBUG_MASK }));
+      return;
+    }
+
+    let requestBody = {};
+    if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+      try {
+        requestBody = await readJsonBody(req);
+        // Để không đọc lại body, đẩy lại vào req
+        req.body = requestBody;
+      } catch (e) {
+        debugLog('INBOUND_ERROR', `Failed to parse request body for ${req.method} ${req.url}: ${e.message}`);
+      }
+    }
+
+    debugLog('INBOUND', `${req.method} ${req.url}`, {
+      headers: { ...req.headers },
+      body: requestBody
+    });
+
+    // startAccountRefreshScheduler(); // Moved to main() to prevent multiple calls
     if (parsed.pathname === '/' || parsed.pathname === '/index.html') {
       const htmlPath = path.resolve(process.cwd(), 'public', 'index.html');
       if (fs.existsSync(htmlPath)) {
@@ -402,22 +778,32 @@ function startServer(port, host) {
     }
     // Receive token captured by extension and notify connected UIs
     if (parsed.pathname === '/api/token' && req.method === 'POST') {
-      readJsonBody(req).then((body) => {
-        const token = body && typeof body.token === 'string' ? body.token : '';
-        const worldX = (body && (typeof body.worldX === 'string' || typeof body.worldX === 'number')) ? body.worldX : null;
-        const worldY = (body && (typeof body.worldY === 'string' || typeof body.worldY === 'number')) ? body.worldY : null;
-        if (!token) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ ok: false })); return; }
+      const body = req.body; // Sử dụng body đã được đọc
+      const token = body && typeof body.token === 'string' ? body.token : '';
+      const worldX = (body && (typeof body.worldX === 'string' || typeof body.worldX === 'number')) ? body.worldX : null;
+      const worldY = (body && (typeof body.worldY === 'string' || typeof body.worldY === 'number')) ? body.worldY : null;
+      const userAgent = (body && typeof body.userAgent === 'string') ? body.userAgent : null;
+      const fingerprint = (body && typeof body.fingerprint === 'object') ? body.fingerprint : null;
+      // Lấy enableAntiDetection từ settings.json
+      const globalSettings = readJson(SETTINGS_FILE, {});
+      const enableAntiDetection = globalSettings.enableAntiDetection || false;
+
+      if (!token) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ ok: false })); return; }
         try {
-          const existing = readJson(SETTINGS_FILE, { cf_clearance: '', worldX: null, worldY: null });
-          const merged = { ...existing };
-          if (worldX != null) merged.worldX = Number(worldX);
-          if (worldY != null) merged.worldY = Number(worldY);
-          writeJson(SETTINGS_FILE, merged);
+          // Lưu trữ userAgent và fingerprint vào settings.json nếu đó là token chính
+          // (Chỉ áp dụng nếu đây là một token độc lập, không phải tài khoản)
+          // Hiện tại, chúng ta lưu trữ UA và FP trên từng tài khoản
+          const existingSettings = readJson(SETTINGS_FILE, { cf_clearance: '', worldX: null, worldY: null, userAgent: null, fingerprint: null });
+          const mergedSettings = { ...existingSettings };
+          if (worldX != null) mergedSettings.worldX = Number(worldX);
+          if (worldY != null) mergedSettings.worldY = Number(worldY);
+          // Không cập nhật userAgent và fingerprint ở đây nữa, chúng sẽ được lưu vào tài khoản
+          writeJson(SETTINGS_FILE, mergedSettings);
         } catch {}
-        sseBroadcast('token', { token, worldX, worldY });
+        sseBroadcast('token', { token, worldX, worldY, userAgent, fingerprint });
         res.writeHead(204, { 'Access-Control-Allow-Origin': '*' });
         res.end();
-      }).catch(() => { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ ok: false })); });
+      // Loại bỏ .catch() vì body đã được xử lý ở đầu hàm
       return;
     }
 
@@ -429,12 +815,12 @@ function startServer(port, host) {
       return;
     }
     if (parsed.pathname === '/api/favorites' && req.method === 'POST') {
-      readJsonBody(req).then((body) => {
-        try {
-          const name = (body && typeof body.name === 'string') ? body.name : '';
-          const modeRaw = (body && typeof body.mode === 'string') ? body.mode : '';
-          const mode = (modeRaw === 'mosaic' || modeRaw === 'single') ? modeRaw : 'single';
-          const coordsIn = Array.isArray(body && body.coords) ? body.coords : [];
+      const body = req.body; // Sử dụng body đã được đọc
+      try {
+        const name = (body && typeof body.name === 'string') ? body.name : '';
+        const modeRaw = (body && typeof body.mode === 'string') ? body.mode : '';
+        const mode = (modeRaw === 'mosaic' || modeRaw === 'single') ? modeRaw : 'single';
+        const coordsIn = Array.isArray(body && body.coords) ? body.coords : [];
           const coords = coordsIn.map((c) => ({ x: Number(c && c.x), y: Number(c && c.y) }))
             .filter((c) => Number.isFinite(c.x) && Number.isFinite(c.y));
           if (!coords.length) {
@@ -462,18 +848,15 @@ function startServer(port, host) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'failed to save' }));
         }
-      }).catch(() => {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: 'invalid json' }));
-      });
+      // Loại bỏ .catch()
       return;
     }
     if (parsed.pathname === '/api/favorites' && req.method === 'DELETE') {
-      readJsonBody(req).then((body) => {
-        try {
-          const modeRaw = (body && typeof body.mode === 'string') ? body.mode : '';
-          const mode = (modeRaw === 'mosaic' || modeRaw === 'single') ? modeRaw : '';
-          const coordsIn = Array.isArray(body && body.coords) ? body.coords : [];
+      const body = req.body; // Sử dụng body đã được đọc
+      try {
+        const modeRaw = (body && typeof body.mode === 'string') ? body.mode : '';
+        const mode = (modeRaw === 'mosaic' || modeRaw === 'single') ? modeRaw : '';
+        const coordsIn = Array.isArray(body && body.coords) ? body.coords : [];
           const coords = coordsIn.map((c) => ({ x: Number(c && c.x), y: Number(c && c.y) }))
             .filter((c) => Number.isFinite(c.x) && Number.isFinite(c.y));
           if (!mode || !coords.length) {
@@ -492,33 +875,68 @@ function startServer(port, host) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'failed to delete' }));
         }
-      }).catch(() => {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: 'invalid json' }));
-      });
+      // Loại bỏ .catch()
       return;
     }
-
-    
+    // Update global settings
+    // New endpoint for GET /api/settings
+    if (parsed.pathname === '/api/settings' && req.method === 'GET') {
+      const settings = readJson(SETTINGS_FILE, {});
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(settings));
+      return;
+    }
+    if (parsed.pathname === '/api/settings/update-interval' && req.method === 'POST') {
+      const body = req.body; // Sử dụng body đã được đọc
+      const updateIntervalMinutes = Number(body && body.updateIntervalMinutes);
+      if (!Number.isFinite(updateIntervalMinutes) || updateIntervalMinutes <= 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'invalid updateIntervalMinutes' }));
+        return;
+      }
+        const settings = readJson(SETTINGS_FILE, {});
+        settings.updateIntervalMinutes = updateIntervalMinutes;
+        writeJson(SETTINGS_FILE, settings);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: true }));
+      // Loại bỏ .catch()
+      return;
+    }
     if (parsed.pathname && /^\/api\/pixel\/([^\/]+)\/([^\/]+)$/.test(parsed.pathname) && req.method === 'POST') {
       const m = parsed.pathname.match(/^\/api\/pixel\/([^\/]+)\/([^\/]+)$/);
       const area = m && m[1] ? m[1] : '';
       const no = m && m[2] ? m[2] : '';
-      readJsonBody(req).then(async (body) => {
-        try {
-          const colors = Array.isArray(body && body.colors) ? body.colors : [];
-          const coords = Array.isArray(body && body.coords) ? body.coords : [];
-          const t = body && typeof body.t === 'string' ? body.t : '';
-          const jToken = body && typeof body.j === 'string' ? body.j : '';
-          if (!colors.length || !coords.length || !t || !jToken) {
-            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-            res.end(JSON.stringify({ error: 'invalid payload' }));
-            return;
-          }
+      const body = req.body; // Sử dụng body đã được đọc
+      try {
+        const colors = Array.isArray(body && body.colors) ? body.colors : [];
+        const coords = Array.isArray(body && body.coords) ? body.coords : [];
+        const t = body && typeof body.t === 'string' ? body.t : '';
+        const jToken = body && typeof body.j === 'string' ? body.j : '';
+        if (!colors.length || !coords.length || !t || !jToken) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'invalid payload' }));
+          return;
+        }
           // Use cf_clearance stored on the specific account matching this token
           const accounts = readJson(ACCOUNTS_FILE, []);
           const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === jToken);
           const cf = acc && typeof acc.cf_clearance === 'string' ? acc.cf_clearance : '';
+          
+          const globalSettings = readJson(SETTINGS_FILE, {});
+          const enableAntiDetection = globalSettings.enableAntiDetection || false;
+          let currentAccountUserAgent = 'Mozilla/5.0'; // Default
+          if (enableAntiDetection) {
+            if (acc && acc.userAgent) {
+              currentAccountUserAgent = acc.userAgent;
+              if (typeof currentAccountUserAgent !== 'string' || !currentAccountUserAgent) {
+                debugLog('WARNING', `Invalid User-Agent found for pixel POST for account ${acc.id}. Using default.`);
+                currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
+              }
+            } else {
+              debugLog('INFO', `Anti-detection enabled but no custom User-Agent for pixel POST for account ${acc ? acc.id : 'unknown'}. Using default.`);
+            }
+          }
+
           if (!cf || cf.length < 30) {
             try { deactivateAccountByToken(jToken); } catch {}
             res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -531,12 +949,12 @@ function startServer(port, host) {
           try {
             const gotScraping = await getGotScrapingFn();
             if (gotScraping) {
-              debugLog('proxy pixel POST begin (got-scraping)', { path: remotePath });
+              debugLog('OUTBOUND', 'proxy pixel POST begin (got-scraping)', { path: remotePath });
               const r = await gotScraping({
                 url: 'https://backend.wplace.live' + remotePath,
                 method: 'POST',
                 headers: {
-                  'User-Agent': 'Mozilla/5.0',
+                  'User-Agent': currentAccountUserAgent, // Sử dụng userAgent từ tài khoản
                   'Accept': '*/*',
                   'Origin': 'https://wplace.live',
                   'Referer': 'https://wplace.live/',
@@ -551,7 +969,7 @@ function startServer(port, host) {
               });
               const status = r && (r.statusCode || r.status) || 0;
               const text = r && (typeof r.body === 'string' ? r.body : (r.body ? String(r.body) : ''));
-              debugLog('proxy pixel POST end (got-scraping)', { status, bodyPreview: String(text || '').slice(0, 300) });
+              debugLog('OUTBOUND_RESPONSE', 'proxy pixel POST end (got-scraping)', { status, bodyPreview: String(text || '').slice(0, 300) });
               if (status >= 500) {
                 try { deactivateAccountByToken(jToken); } catch {}
               }
@@ -567,7 +985,7 @@ function startServer(port, host) {
             method: 'POST',
             agent: HTTPS_AGENT,
             headers: {
-              'User-Agent': 'Mozilla/5.0',
+              'User-Agent': currentAccountUserAgent, // Sử dụng userAgent từ tài khoản
               'Accept': '*/*',
               'Origin': 'https://wplace.live',
               'Referer': 'https://wplace.live/',
@@ -575,7 +993,7 @@ function startServer(port, host) {
               'Cookie': `j=${jToken}; cf_clearance=${cf}`
             }
           };
-          debugLog('proxy pixel POST begin', { path: remotePath, headers: { ...options.headers, Cookie: maskCookieHeader(options.headers.Cookie) } });
+          debugLog('OUTBOUND', 'proxy pixel POST begin', { path: remotePath, headers: { ...options.headers, Cookie: maskCookieHeader(options.headers.Cookie) } });
           const upstreamReq = https.request(options, (up) => {
             const chunks = [];
             up.on('data', (d) => chunks.push(d));
@@ -586,7 +1004,7 @@ function startServer(port, host) {
               else if (encoding.includes('deflate')) { try { buf = zlib.inflateRawSync(buf); } catch { try { buf = zlib.inflateSync(buf); } catch {} } }
               const text = buf.toString('utf8');
               const statusCode = up.statusCode || 0;
-              debugLog('proxy pixel POST end', { status: statusCode, bodyPreview: text.slice(0, 300) });
+              debugLog('OUTBOUND_RESPONSE', 'proxy pixel POST end', { status: statusCode, bodyPreview: text.slice(0, 300) });
               if (statusCode >= 500) {
                 try { deactivateAccountByToken(jToken); } catch {}
               }
@@ -604,32 +1022,83 @@ function startServer(port, host) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'proxy failed' }));
         }
-      }).catch(() => {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: 'invalid json' }));
-      });
+      // Loại bỏ .catch()
       return;
     }
+    // Original pixel POST endpoint logic. Temporarily uncommented to restore.
+    // New endpoint to send pixel data to worker pool
+/*
+    if (parsed.pathname === '/api/pixel' && req.method === 'POST') {
+        const body = req.body;
+        const jToken = body && typeof body.j === 'string' ? body.j : '';
+        const pixelData = {
+            area: body && body.area,
+            no: body && body.no,
+            colors: Array.isArray(body && body.colors) ? body.colors : [],
+            coords: Array.isArray(body && body.coords) ? body.coords : [],
+            t: body && typeof body.t === 'string' ? body.t : ''
+        };
 
-    // Proxy purchase to backend.wplace.live
-    if (parsed.pathname === '/api/purchase' && req.method === 'POST') {
-      readJsonBody(req).then(async (body) => {
-        try {
-          const productIdRaw = body && body.productId;
-          const amountRaw = body && body.amount;
-          const variantRaw = body && body.variant;
-          const jToken = body && typeof body.j === 'string' ? body.j : '';
-          const productId = Number(productIdRaw);
-          const amount = Math.max(1, Number(amountRaw || 1));
-          const variant = (variantRaw == null ? null : Number(variantRaw));
-          if (!Number.isFinite(productId) || productId <= 0 || !jToken) {
+        if (!pixelData.colors.length || !pixelData.coords.length || !pixelData.t || !jToken) {
             res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({ error: 'invalid payload' }));
             return;
-          }
+        }
+
+        const account = accountManager.findAccountByToken(jToken);
+        if (!account) {
+            res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'account not found' }));
+            return;
+        }
+
+        // Add task to worker queue
+        workerPool.addTask({ type: 'sendPixel', account, pixelData })
+            .then(result => {
+                if (result.success) {
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ success: true, message: 'Pixel sent successfully', response: result.response }));
+                } else {
+                    // Check if it's a 500 error for deactivation
+                    if (result.status >= 500 && result.status < 600) {
+                        deactivateAccountByToken(jToken); // Deactivate account on 5xx errors
+                    }
+                    res.writeHead(result.status || 500, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ success: false, error: result.error }));
+                }
+            })
+            .catch(e => {
+                debugLog('ERROR', `Error processing pixel task for account ${account.name}:`, e.message);
+                res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ success: false, error: 'Internal server error processing pixel task' }));
+            });
+        return;
+    }
+        */
+
+    // Proxy purchase to backend.wplace.live
+    if (parsed.pathname === '/api/purchase' && req.method === 'POST') {
+      const body = req.body; // Sử dụng body đã được đọc
+      try {
+        const productIdRaw = body && body.productId;
+        const amountRaw = body && body.amount;
+        const variantRaw = body && body.variant;
+        const jToken = body && typeof body.j === 'string' ? body.j : '';
+        const productId = Number(productIdRaw);
+        const amount = Math.max(1, Number(amountRaw || 1));
+        const variant = (variantRaw == null ? null : Number(variantRaw));
+        if (!Number.isFinite(productId) || productId <= 0 || !jToken) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'invalid payload' }));
+          return;
+        }
           const accounts = readJson(ACCOUNTS_FILE, []);
           const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === jToken);
           const cf = acc && typeof acc.cf_clearance === 'string' ? acc.cf_clearance : '';
+        /*
+          const acc = accountManager.findAccountByToken(jToken);
+          const cf = acc && typeof acc.cf_clearance === 'string' ? acc.cf_clearance : '';
+          */
           if (!cf || cf.length < 30) {
             try { deactivateAccountByToken(jToken); } catch {}
             res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -644,12 +1113,12 @@ function startServer(port, host) {
           try {
             const gotScraping = await getGotScrapingFn();
             if (gotScraping) {
-              debugLog('proxy purchase POST begin (got-scraping)', { path: remotePath, body: payload });
+              debugLog('OUTBOUND', 'proxy purchase POST begin (got-scraping)', { path: remotePath, body: payload });
               const r = await gotScraping({
                 url: 'https://backend.wplace.live' + remotePath,
                 method: 'POST',
                 headers: {
-                  'User-Agent': 'Mozilla/5.0',
+                  'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
                   'Accept': 'application/json, text/plain, */*',
                   'Origin': 'https://wplace.live',
                   'Referer': 'https://wplace.live/',
@@ -664,12 +1133,27 @@ function startServer(port, host) {
               });
               const status = r && (r.statusCode || r.status) || 0;
               const text = r && (typeof r.body === 'string' ? r.body : (r.body ? String(r.body) : ''));
-              debugLog('proxy purchase POST end (got-scraping)', { status, bodyPreview: String(text || '').slice(0, 300) });
+              debugLog('OUTBOUND_RESPONSE', 'proxy purchase POST end (got-scraping)', { status, bodyPreview: String(text || '').slice(0, 300) });
               res.writeHead(status || 502, { 'Content-Type': 'application/json; charset=utf-8' });
               res.end(text);
               return;
             }
           } catch {}
+
+          const globalSettings = readJson(SETTINGS_FILE, {});
+          const enableAntiDetection = globalSettings.enableAntiDetection || false;
+          let currentAccountUserAgent = 'Mozilla/5.0'; // Default
+          if (enableAntiDetection) {
+            if (acc && acc.userAgent) {
+              currentAccountUserAgent = acc.userAgent;
+              if (typeof currentAccountUserAgent !== 'string' || !currentAccountUserAgent) {
+                debugLog('WARNING', `Invalid User-Agent found for purchase POST for account ${acc.id}. Using default.`);
+                currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
+              }
+            } else {
+              debugLog('INFO', `Anti-detection enabled but no custom User-Agent for purchase POST for account ${acc ? acc.id : 'unknown'}. Using default.`);
+            }
+          }
 
           const options = {
             hostname: 'backend.wplace.live',
@@ -678,7 +1162,7 @@ function startServer(port, host) {
             method: 'POST',
             agent: HTTPS_AGENT,
             headers: {
-              'User-Agent': 'Mozilla/5.0',
+              'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
               'Accept': 'application/json, text/plain, */*',
               'Origin': 'https://wplace.live',
               'Referer': 'https://wplace.live/',
@@ -686,7 +1170,7 @@ function startServer(port, host) {
               'Cookie': `j=${jToken}; cf_clearance=${cf}`
             }
           };
-          debugLog('proxy purchase POST begin', { path: remotePath, headers: { ...options.headers, Cookie: maskCookieHeader(options.headers.Cookie) }, body: payload });
+          debugLog('OUTBOUND', 'proxy purchase POST begin', { path: remotePath, headers: { ...options.headers, Cookie: maskCookieHeader(options.headers.Cookie) }, body: payload });
           const upstreamReq = https.request(options, (up) => {
             const chunks = [];
             up.on('data', (d) => chunks.push(d));
@@ -697,7 +1181,7 @@ function startServer(port, host) {
               else if (encoding.includes('deflate')) { try { buf = zlib.inflateRawSync(buf); } catch { try { buf = zlib.inflateSync(buf); } catch {} } }
               const text = buf.toString('utf8');
               const statusCode = up.statusCode || 0;
-              debugLog('proxy purchase POST end', { status: statusCode, bodyPreview: text.slice(0, 300) });
+              debugLog('OUTBOUND_RESPONSE', 'proxy purchase POST end', { status: statusCode, bodyPreview: text.slice(0, 300) });
               res.writeHead(statusCode || 502, { 'Content-Type': 'application/json; charset=utf-8' });
               res.end(text);
             });
@@ -712,13 +1196,9 @@ function startServer(port, host) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'proxy failed' }));
         }
-      }).catch(() => {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: 'invalid json' }));
-      });
+      // Loại bỏ .catch()
       return;
     }
-    
     if (parsed.pathname === '/api/accounts' && req.method === 'GET') {
       const accounts = readJson(ACCOUNTS_FILE, []);
       try {
@@ -733,6 +1213,22 @@ function startServer(port, host) {
       res.end(JSON.stringify(accounts));
       return;
     }
+/*
+    if (parsed.pathname === '/api/accounts' && req.method === 'GET') {
+      const accounts = accountManager.getAccounts(); // Use the getter from AccountManager
+      try {
+        for (let i = 0; i < accounts.length; i++) {
+          const a = accounts[i];
+          const cf = a && typeof a.cf_clearance === 'string' ? a.cf_clearance : '';
+          if (!cf || cf.length < 30) { accountManager.setAccountStatus(a.id, 'inactive'); } // Use setAccountStatus
+        }
+        // accountManager.saveAccounts(); // saveAccounts() is called inside setAccountStatus
+      } catch {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(accounts));
+      return;
+    }
+*/
     
     if (parsed.pathname && parsed.pathname.startsWith('/api/accounts/') && req.method === 'DELETE') {
       const idStr = parsed.pathname.split('/').pop();
@@ -746,16 +1242,16 @@ function startServer(port, host) {
     if (parsed.pathname && parsed.pathname.startsWith('/api/accounts/') && (req.method === 'PUT' || req.method === 'PATCH')) {
       const idStr = parsed.pathname.split('/').pop();
       const id = Number(idStr);
-      readJsonBody(req).then((body) => {
-        const accounts = readJson(ACCOUNTS_FILE, []);
-        const idx = accounts.findIndex(a => a.id === id);
-        if (idx === -1) {
-          res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ error: 'not found' }));
-          return;
-        }
+      const body = req.body; // Sử dụng body đã được đọc
+      const accounts = readJson(ACCOUNTS_FILE, []);
+      const idx = accounts.findIndex(a => a.id === id);
+      if (idx === -1) {
+        res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'not found' }));
+        return;
+      }
         const updated = { ...accounts[idx] };
-        if (typeof body.name === 'string') updated.name = body.name;
+        if (body.hasOwnProperty('name')) updated.name = String(body.name || ''); // Cho phép name rỗng hoặc không có
         if (typeof body.token === 'string') updated.token = body.token;
         if (typeof body.cf_clearance === 'string') {
           const newCf = String(body.cf_clearance);
@@ -767,6 +1263,73 @@ function startServer(port, host) {
           }
           updated.cf_clearance = newCf;
         }
+      /*
+      const id = Number(idStr);
+      if (accountManager.deleteAccount(id)) { // Use deleteAccount
+        res.writeHead(204); res.end();
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'not found' }));
+      }
+      return;
+    }
+    if (parsed.pathname && parsed.pathname.startsWith('/api/accounts/') && (req.method === 'PUT' || req.method === 'PATCH')) {
+      const idStr = parsed.pathname.split('/').pop();
+      const id = Number(idStr);
+      const body = req.body; // Sử dụng body đã được đọc
+      
+      const existingAccount = accountManager.getAccounts().find(a => a.id === id);
+      if (!existingAccount) {
+        res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'not found' }));
+        return;
+      }
+        const updated = { ...existingAccount }; // Start with existing account
+        if (body.hasOwnProperty('name')) updated.name = String(body.name || ''); // Cho phép name rỗng hoặc không có
+        if (typeof body.token === 'string') updated.token = body.token;
+        if (typeof body.cf_clearance === 'string') {
+          const newCf = String(body.cf_clearance);
+          // Check for duplicate cf_clearance across other accounts
+          const dup = accountManager.getAccounts().find(a => a && a.id !== id && typeof a.cf_clearance === 'string' && a.cf_clearance === newCf);
+          if (dup) {
+            res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'cf_clearance already used' }));
+            return;
+          }
+          updated.cf_clearance = newCf;
+        }
+
+        // Handle pixelTokens (add, remove, update)
+        if (Array.isArray(body.pixelTokens)) {
+            updated.pixelTokens = body.pixelTokens.map(t => String(t)); // Ensure they are strings
+        }
+        */
+
+        const globalSettings = readJson(SETTINGS_FILE, {});
+        const enableAntiDetection = globalSettings.enableAntiDetection || false;
+        const regenerateAntiDetectionParams = body.regenerateAntiDetectionParams === true;
+
+        if (enableAntiDetection && (regenerateAntiDetectionParams || !updated.userAgent || !updated.fingerprint)) {
+            debugLog('INFO', `Generating new anti-detection params for account ${id}. Regenerate: ${regenerateAntiDetectionParams}`);
+            const generatedParams = generateAntiDetectionParams();
+            if (generatedParams) {
+                updated.userAgent = generatedParams.userAgent;
+                updated.fingerprint = generatedParams.fingerprint;
+            } else {
+                debugLog('WARNING', `Failed to generate anti-detection params for account ${id}. Using null values.`);
+                updated.userAgent = null;
+                updated.fingerprint = null;
+            }
+        } else if (!enableAntiDetection) {
+            // Nếu anti-detection bị tắt, xóa userAgent và fingerprint
+            updated.userAgent = null;
+            updated.fingerprint = null;
+        } else {
+            // Nếu anti-detection bật và không yêu cầu regenerate, giữ nguyên các giá trị hiện có
+            if (typeof body.userAgent === 'string') updated.userAgent = body.userAgent;
+            if (typeof body.fingerprint === 'object') updated.fingerprint = body.fingerprint;
+        }
+
         if (body.pixelRight != null) updated.pixelRight = body.pixelRight;
         if (typeof body.active === 'boolean') updated.active = body.active;
         if (body.autobuy === null) { updated.autobuy = null; }
@@ -779,23 +1342,22 @@ function startServer(port, host) {
         writeJson(ACCOUNTS_FILE, accounts);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(updated));
-      }).catch(() => {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: 'invalid json' }));
-      });
+      // Loại bỏ .catch()
       return;
     }
     // Settings endpoints removed; cf_clearance is now per-account
     if (parsed.pathname === '/api/accounts' && req.method === 'POST') {
-      readJsonBody(req).then(async (body) => {
-        const name = (body && body.name) ? String(body.name) : '';
-        const token = (body && body.token) ? String(body.token) : '';
-        const cf_clearance = (body && body.cf_clearance) ? String(body.cf_clearance) : '';
-        if (!name || !token || !cf_clearance || cf_clearance.length < 30) {
-          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ error: 'name, token and cf_clearance required' }));
-          return;
-        }
+      const body = req.body; // Sử dụng body đã được đọc
+      const name = (body && body.name) ? String(body.name) : '';
+      const token = (body && body.token) ? String(body.token) : '';
+      const cf_clearance = (body && body.cf_clearance) ? String(body.cf_clearance) : '';
+      // Các trường userAgent và fingerprint trong body không được sử dụng trực tiếp nữa,
+      // mà sẽ được tạo ngẫu nhiên nếu enableAntiDetection bật.
+      if (!name || !token || !cf_clearance || cf_clearance.length < 30) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'name, token and cf_clearance required' }));
+        return;
+      }
         const accounts = readJson(ACCOUNTS_FILE, []);
         try {
           const dup = accounts.find(a => a && typeof a.cf_clearance === 'string' && a.cf_clearance === cf_clearance);
@@ -805,9 +1367,87 @@ function startServer(port, host) {
             return;
           }
         } catch {}
-        const account = { id: Date.now(), name, token, cf_clearance, pixelCount: null, pixelMax: null, droplets: null, extraColorsBitmap: null, active: false, autobuy: null };
+/*        // Update account status if explicitly provided or derived
+        if (typeof body.status === 'string') {
+          updated.status = body.status;
+          updated.active = (body.status === 'active');
+        } else if (typeof body.active === 'boolean') { // Fallback for old 'active' property
+          updated.active = body.active;
+          updated.status = body.active ? 'active' : 'inactive';
+        }
+        
+        // Update proxy settings
+        if (typeof body.proxySettings === 'object' && body.proxySettings !== null) {
+            updated.proxySettings = { ...updated.proxySettings, ...body.proxySettings };
+        }
+
+        // Update timestamps if provided (or handled by manager)
+        if (typeof body.lastUsedTimestamp === 'number') updated.lastUsedTimestamp = body.lastUsedTimestamp;
+        if (typeof body.lastRefresh === 'number') updated.lastRefresh = body.lastRefresh; // For manual refresh override
+
+        if (accountManager.updateAccount(id, updated)) {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(updated));
+        } else {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'failed to update account' }));
+        }
+        return;
+    }
+    // Settings endpoints removed; cf_clearance is now per-account
+    if (parsed.pathname === '/api/accounts' && req.method === 'POST') {
+      const body = req.body; // Sử dụng body đã được đọc
+      const name = (body && body.name) ? String(body.name) : '';
+      const token = (body && body.token) ? String(body.token) : '';
+      const cf_clearance = (body && body.cf_clearance) ? String(body.cf_clearance) : '';
+      // Các trường userAgent và fingerprint trong body không được sử dụng trực tiếp nữa,
+      // mà sẽ được tạo ngẫu nhiên nếu enableAntiDetection bật.
+      if (!name || !token || !cf_clearance || cf_clearance.length < 30) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'name, token and cf_clearance required' }));
+        return;
+      }
+        const dup = accountManager.getAccounts().find(a => a && typeof a.cf_clearance === 'string' && a.cf_clearance === cf_clearance);
+        if (dup) {
+            res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'cf_clearance already used' }));
+            return;
+        }
+*/
+        const globalSettings = readJson(SETTINGS_FILE, {});
+        const enableAntiDetection = globalSettings.enableAntiDetection || false;
+
+        let generatedUserAgent = null;
+        let generatedFingerprint = null;
+        if (enableAntiDetection) {
+            const generatedParams = generateAntiDetectionParams();
+            if (generatedParams) {
+                generatedUserAgent = generatedParams.userAgent;
+                generatedFingerprint = generatedParams.fingerprint;
+            } else {
+                debugLog('WARNING', 'Failed to generate anti-detection params for new account. Using null values.');
+            }
+        }
+        
+        const account = {
+          id: Date.now(),
+          name,
+          token,
+          cf_clearance,
+          userAgent: generatedUserAgent, // Sử dụng userAgent đã tạo hoặc null
+          fingerprint: generatedFingerprint, // Sử dụng fingerprint đã tạo hoặc null
+          pixelCount: null,
+          pixelMax: null,
+          droplets: null,
+          extraColorsBitmap: null,
+          active: false,
+          autobuy: null,
+          lastRefresh: Date.now()
+        };
         try {
-          const me = await fetchMe(cf_clearance, token);
+          // Khi tạo tài khoản mới, fetchMe không nên sử dụng userAgent ngẫu nhiên vì có thể chưa hợp lệ.
+          // Thay vào đó, nó nên sử dụng userAgent mặc định hoặc userAgent từ tài khoản nếu có.
+          const me = await fetchMe(cf_clearance, token, account.userAgent); // Sử dụng generatedUserAgent nếu có
           if (me && me.charges) {
             account.pixelCount = Number(me.charges.count);
             account.pixelMax = Number(me.charges.max);
@@ -828,10 +1468,7 @@ function startServer(port, host) {
         writeJson(ACCOUNTS_FILE, accounts);
         res.writeHead(201, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(account));
-      }).catch(() => {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: 'invalid json' }));
-      });
+      // Loại bỏ .catch()
       return;
     }
     if (parsed.pathname && /^\/api\/accounts\/\d+\/refresh$/.test(parsed.pathname) && req.method === 'POST') {
@@ -846,10 +1483,10 @@ function startServer(port, host) {
         try { accounts[idx] = { ...acct, active: false }; writeJson(ACCOUNTS_FILE, accounts); } catch {}
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: 'cf_clearance missing for account' })); return; }
       (async () => {
-        debugLog('refresh: begin got-scraping /me fetch', { accountId: id, name: acct && acct.name ? String(acct.name) : undefined });
+        debugLog('OUTBOUND', 'refresh: begin got-scraping /me fetch', { accountId: id, name: acct && acct.name ? String(acct.name) : undefined });
         let me = null;
         try {
-          me = await fetchMe(cf, acct.token);
+          me = await fetchMe(cf, acct.token, acct.userAgent);
         } catch (err) {
           const msg = (err && err.message) ? String(err.message) : String(err);
           const code = (err && err.code) ? String(err.code) : '';
@@ -857,7 +1494,7 @@ function startServer(port, host) {
             console.log('refresh fetch error:', msg);
           }
         }
-        debugLog('refresh: got-scraping result', {
+        debugLog('OUTBOUND_RESPONSE', 'refresh: got-scraping result', {
           ok: !!me,
           meta: me ? {
             name: me.name,
@@ -870,9 +1507,9 @@ function startServer(port, host) {
           
           acct.pixelCount = Math.floor(Number(me.charges.count));
           acct.pixelMax = Math.floor(Number(me.charges.max));
-          acct.active = true;
+          acct.active = true; // Keep active if refresh successful
         } else {
-          acct.active = false;
+          acct.active = false; // Deactivate if refresh fails
         }
         if (me && Object.prototype.hasOwnProperty.call(me, 'droplets')) {
           const d = Number(me.droplets);
@@ -882,37 +1519,8 @@ function startServer(port, host) {
           const b = Number(me.extraColorsBitmap);
           acct.extraColorsBitmap = Number.isFinite(b) ? Math.floor(b) : null;
         }
-        if (acct.autobuy === 'max' || acct.autobuy === 'rec') {
-          const price = 500;
-          const productId = acct.autobuy === 'max' ? 70 : 80;
-          const droplets = Number(acct.droplets || 0);
-          const qty = Math.floor(droplets / price);
-          if (qty > 0) {
-            try {
-              const ok = await purchaseProduct(cf, acct.token, productId, qty);
-              if (ok) {
-                try {
-                  const me2 = await fetchMe(cf, acct.token);
-                  if (me2 && me2.charges) {
-                    acct.pixelCount = Math.floor(Number(me2.charges.count));
-                    acct.pixelMax = Math.floor(Number(me2.charges.max));
-                    acct.active = true;
-                  } else {
-                    acct.active = false;
-                  }
-                  if (me2 && Object.prototype.hasOwnProperty.call(me2, 'droplets')) {
-                    const d2 = Number(me2.droplets);
-                    acct.droplets = Number.isFinite(d2) ? Math.floor(d2) : null;
-                  }
-                  if (me2 && Object.prototype.hasOwnProperty.call(me2, 'extraColorsBitmap')) {
-                    const b2 = Number(me2.extraColorsBitmap);
-                    acct.extraColorsBitmap = Number.isFinite(b2) ? Math.floor(b2) : null;
-                  }
-                } catch {}
-              }
-            } catch {}
-          }
-        }
+        acct.lastRefresh = now; // Update last refresh time
+        updatedAccounts = true;
         accounts[idx] = acct;
         writeJson(ACCOUNTS_FILE, accounts);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -920,7 +1528,7 @@ function startServer(port, host) {
       })().catch(() => {
         res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ error: 'upstream error' }));
-      });
+      })(); // đóng async function tự gọi
       return;
     }
     
@@ -937,6 +1545,22 @@ function startServer(port, host) {
         res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Dosya servis edilemedi.');
       }
+      return;
+    }
+    if (parsed.pathname === '/api/debug' && req.method === 'POST') {
+      const body = req.body;
+      const enable = body && typeof body.enable === 'boolean' ? body.enable : null;
+      const mask = body && typeof body.mask === 'boolean' ? body.mask : null;
+      if (enable !== null) {
+        DEBUG = enable;
+        console.log(`Debug mode set to: ${DEBUG}`);
+      }
+      if (mask !== null) {
+        DEBUG_MASK = mask;
+        console.log(`Debug mask set to: ${DEBUG_MASK}`);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ DEBUG, DEBUG_MASK }));
       return;
     }
     if (parsed.pathname === '/favicon.ico') {
@@ -986,10 +1610,68 @@ function main() {
       });
     return;
   }
-
+ 
   startServer(port, host);
+  startAccountRefreshScheduler(); // Start the scheduler once when the application starts
 }
 
+let refreshSchedulerInterval = null;
+async function startAccountRefreshScheduler() {
+  if (refreshSchedulerInterval) {
+    clearInterval(refreshSchedulerInterval);
+  }
+  const settings = readJson(SETTINGS_FILE, {});
+  const intervalMinutes = Number(settings.updateIntervalMinutes || 5);
+  const intervalMs = Math.max(1000, intervalMinutes * 60 * 1000); // Minimum 1 second
+
+  console.log(`Account refresh scheduler started with interval: ${intervalMinutes} minutes (${intervalMs}ms)`);
+
+  refreshSchedulerInterval = setInterval(async () => {
+    // const accounts = accountManager.getAccounts(); // Already get the latest accounts at the beginning of the function
+    const accounts = readJson(ACCOUNTS_FILE, []);
+    const now = Date.now();
+    let updatedAccounts = false;
+
+    for (let i = 0; i < accounts.length; i++) {
+      const account = accounts[i];
+      // Only refresh active accounts that have a token and whose refresh interval has passed
+      if (account.active && account.token && (now - (account.lastRefresh || 0)) >= intervalMs) {
+        console.log(`Refreshing account: ${account.name}`);
+        const cf = account.cf_clearance;
+        try {
+          const me = await fetchMe(cf, account.token, account.userAgent); // Truyền userAgent
+          if (me && me.charges) {
+            account.pixelCount = Math.floor(Number(me.charges.count));
+            account.pixelMax = Math.floor(Number(me.charges.max));
+            account.active = true; // Keep active if refresh successful
+          } else {
+            account.active = false; // Deactivate if refresh fails
+          }
+          if (me && Object.prototype.hasOwnProperty.call(me, 'droplets')) {
+            const d = Number(me.droplets);
+            account.droplets = Number.isFinite(d) ? Math.floor(d) : null;
+          }
+          if (me && Object.prototype.hasOwnProperty.call(me, 'extraColorsBitmap')) {
+            const b = Number(me.extraColorsBitmap);
+            account.extraColorsBitmap = Number.isFinite(b) ? Math.floor(b) : null;
+          }
+          account.lastRefresh = now; // Update last refresh time
+          updatedAccounts = true;
+        } catch (err) {
+          console.error(`Error refreshing account ${account.name}: ${err.message}`);
+          account.active = false; // Deactivate on error
+          account.lastRefresh = now; // Still update last refresh to avoid continuous retries
+          updatedAccounts = true;
+        }
+      }
+    }
+
+    if (updatedAccounts) {
+      writeJson(ACCOUNTS_FILE, accounts);
+    }
+  }, intervalMs);
+}
+ 
 if (require.main === module) {
   main();
 }

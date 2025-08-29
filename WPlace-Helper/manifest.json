@@ -8,9 +8,10 @@
   },
   "permissions": [
     "storage",
-    "cookies"
-  ],
-  "host_permissions": [
+    "cookies",
+    "alarms"
+   ],
+   "host_permissions": [
     "https://wplace.live/*",
     "https://*.wplace.live/*"
   ],

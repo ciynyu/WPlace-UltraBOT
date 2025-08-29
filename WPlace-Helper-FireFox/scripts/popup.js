@@ -14,6 +14,10 @@ document.addEventListener('DOMContentLoaded', function() {
   const cfTokenInput = document.getElementById('cf-token-input');
   const cfCopyRefreshButton = document.getElementById('cf-copy-refresh-button');
 
+  const toggleAntiDetection = document.getElementById('toggle-anti-detection');
+  const toggleAntiDetectionWrap = document.getElementById('toggle-anti-detection-wrap');
+  const toggleAntiDetectionLabel = document.getElementById('toggle-anti-detection-label');
+
   let activeCfCookie = null;
   let activeCfTabId = null;
 
@@ -32,11 +36,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (worldYInput) worldYInput.value = (result && result.wplace_world_y) ? result.wplace_world_y : '-';
   });
 
-  chrome.storage.local.get(['wplace_enabled'], function(result) {
-    const enabled = result && typeof result.wplace_enabled === 'boolean' ? result.wplace_enabled : true;
-    if (toggleCapture) toggleCapture.checked = enabled;
-    if (toggleWrap) toggleWrap.setAttribute('data-checked', String(!!enabled));
-    if (toggleLabel) toggleLabel.textContent = enabled ? 'On' : 'Off';
+  chrome.storage.local.get(['wplace_enabled', 'enableAntiDetection'], function(result) {
+    const captureEnabled = result && typeof result.wplace_enabled === 'boolean' ? result.wplace_enabled : true;
+    if (toggleCapture) toggleCapture.checked = captureEnabled;
+    if (toggleWrap) toggleWrap.setAttribute('data-checked', String(!!captureEnabled));
+    if (toggleLabel) toggleLabel.textContent = captureEnabled ? 'On' : 'Off';
+
+    const antiDetectionEnabled = result && typeof result.enableAntiDetection === 'boolean' ? result.enableAntiDetection : false;
+    if (toggleAntiDetection) toggleAntiDetection.checked = antiDetectionEnabled;
+    if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(!!antiDetectionEnabled));
+    if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = antiDetectionEnabled ? 'On' : 'Off';
   });
 
   chrome.storage.onChanged.addListener(function(changes, area) {
@@ -60,6 +69,15 @@ document.addEventListener('DOMContentLoaded', function() {
       if (toggleWrap) toggleWrap.setAttribute('data-checked', String(enabled));
       if (toggleLabel) toggleLabel.textContent = enabled ? 'On' : 'Off';
       chrome.storage.local.set({ wplace_enabled: enabled });
+    });
+  }
+
+  if (toggleAntiDetection) {
+    toggleAntiDetection.addEventListener('change', function() {
+      const enabled = !!toggleAntiDetection.checked;
+      if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(enabled));
+      if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = enabled ? 'On' : 'Off';
+      chrome.storage.local.set({ enableAntiDetection: enabled });
     });
   }
 

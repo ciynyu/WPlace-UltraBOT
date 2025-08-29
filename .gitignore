@@ -1,0 +1,5 @@
+node_modules/
+plan/
+db/accounts.json
+db/settings.json
+db/favorites.json

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -152,6 +152,52 @@
     .pixel-marker[hidden] { display: none; }
     #selection-overlay { position: fixed; left: 0; top: 0; z-index: 700; pointer-events: none; image-rendering: pixelated; }
     body.dragging-sign #sign { cursor: grabbing; }
+    /* CSS cho range-overlay */
+   #range-overlay {
+       position: absolute;
+       border: 2px dashed #22d3ee; /* Màu xanh neon */
+       background: rgba(34, 211, 238, 0.2); /* Nền trong suốt với màu xanh */
+       z-index: 1000;
+       pointer-events: none;
+   }
+   #range-overlay.saved-overlay {
+       background: none; /* Bỏ màu nền khi đã lưu */
+       border: 2px solid #22d3ee; /* Viền liền khi đã lưu */
+   }
+
+    #overlay-section {
+        width: 100%;
+        margin-top: 8px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        padding-top: 8px;
+    }
+    .overlay-list {
+        max-height: 120px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 6px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 6px;
+    }
+    .overlay-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 8px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+        font-size: 12px;
+    }
+    .overlay-item.selected {
+        background: rgba(34, 211, 238, 0.25);
+    }
+    .overlay-item-actions button {
+        padding: 2px 5px;
+        font-size: 10px;
+    }
     
     #sidebar {
       position: fixed;
@@ -312,6 +358,30 @@
       justify-content: center;
       background: rgba(0,0,0,0.45);
       z-index: 1100;
+    }
+    #accounts-modal[hidden] { display: none; }
+    #img-preview-modal {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.45);
+      z-index: 1100;
+    }
+    #img-preview-modal[hidden] { display: none; }
+    
+    body.no-scroll { overflow: hidden; }
+    #img-preview-canvas {
+      width: min(540px, 85vw);
+      height: min(360px, 48vh);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.25);
+      image-rendering: pixelated;
+      display: block;
+      margin: 0 auto 10px auto;
+    }
     }
     #accounts-modal[hidden] { display: none; }
     #img-preview-modal {
@@ -618,7 +688,7 @@
     #ready-popup .controls-row { justify-content: center; gap: 10px; }
     #ready-token-input { width: 320px; }
     #select-mode-controls { justify-content: center; }
-    .select-mode-wrap { display: inline-flex; align-items: center; gap: 8px; }
+    .select-mode-wrap { display: inline-flex; align-items: center; gap: 8px; justify-content: center; flex: 1; }
     .select-mode-label { font-size: 12px; color: #e5e7eb; opacity: 0.8; cursor: pointer; user-select: none; }
     .select-mode-label.active { color: #22d3ee; opacity: 1; }
     .select-mode-track { position: relative; width: 44px; height: 24px; border-radius: 9999px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); cursor: pointer; padding: 0; }
@@ -701,11 +771,41 @@
       background-position: center;
       background-size: 80% 80%;
     }
+    /* Styles for the eraser button */
+    #eraser-button {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(calc(50% + 80px)); /* Adjust 80px based on color-palette width / 2 + gap */
+      background: rgba(17, 20, 24, 0.85);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1001;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+      width: 44px; /* Adjust as needed */
+      height: 44px; /* Adjust as needed */
+      cursor: pointer;
+    }
+
+    #eraser-button.active {
+      border-color: #22d3ee;
+      box-shadow: 0 0 0 2px rgba(34,211,238,0.25);
+    }
+
+    #eraser-button svg {
+      width: 24px;
+      height: 24px;
+    }
     
     #lang-switch {
       position: fixed;
       top: 16px;
-      left: 180px; 
+      left: 180px;
       z-index: 1001;
       display: flex;
       align-items: center;
@@ -799,7 +899,9 @@
   <img id="sign" alt="sign" draggable="false" hidden />
   <img id="pixel-hover" class="pixel-marker" alt="hover" hidden />
   <canvas id="selection-overlay"></canvas>
+  <canvas id="dim-overlay"></canvas> <!-- Thêm dim-overlay -->
   <div id="pixel-selected-list" hidden></div>
+  <div id="range-overlay" hidden></div>
   <div id="top-toolbar">
   <div id="sound-control">
     <button id="sound-toggle" class="app-btn" type="button" title="" aria-label="">🔊</button>
@@ -853,6 +955,14 @@
             <button id="btn-auto-select" class="app-btn" type="button" data-i18n="ready.autoSelect">Otomatik seç</button>
             <button id="start" class="app-btn" type="button" data-i18n="ready.start">Başlat</button>
           </div>
+          <div id="overlay-section">
+            <div class="controls-row">
+              <span>Overlays</span>
+              <button id="btn-add-overlay" class="app-btn" type="button" aria-label="Add overlay" style="padding: 4px 8px; font-size: 14px;">+</button>
+            </div>
+             <div id="overlay-list" class="overlay-list">
+             </div>
+           </div>
           <div class="controls-row" id="select-mode-controls">
             <div class="select-mode-wrap">
               <span id="select-mode-label-left" class="select-mode-label active" data-i18n="ready.selectMode.multi">Önce çok yerden seç</span>
@@ -860,6 +970,77 @@
                 <span class="select-mode-knob"></span>
               </button>
               <span id="select-mode-label-right" class="select-mode-label" data-i18n="ready.selectMode.frame">Önce çerçeveyi seç</span>
+            </div>
+          </div>
+          <div id="auto-paint-settings" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div class="controls-row">
+              <span style="font-weight: bold;">Auto Paint Settings</span>
+            </div>
+            <div class="controls-row" style="margin-top: 8px; flex-direction: column; align-items: flex-start;">
+              <span style="font-weight: bold;">Color Priority List</span>
+              <div id="color-priority-list" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; width: 100%; min-height: 30px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 6px;">
+                <!-- Các ô màu ưu tiên sẽ được thêm vào đây -->
+              </div>
+              <div class="controls-row" style="margin-top: 8px; justify-content: flex-start; width: 100%;">
+                <button id="add-priority-color-btn" class="app-btn" type="button" style="padding: 4px 8px; font-size: 14px;">+</button>
+                <button id="pick-color-tool-btn" class="app-btn" type="button" style="padding: 4px 8px; font-size: 14px;">Pick Color</button>
+                <button id="clear-priority-list-btn" class="app-btn" type="button" style="padding: 4px 8px; font-size: 14px;">Clear List</button>
+              </div>
+            </div>
+            <div class="controls-row" style="margin-top: 8px; flex-direction: column; align-items: flex-start;">
+              <span style="font-weight: bold;">Broken Pixel Priority Colors</span>
+              <div id="broken-pixel-priority-list" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; width: 100%; min-height: 30px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 6px;">
+                <!-- Các ô màu ưu tiên pixel bị phá sẽ được thêm vào đây -->
+              </div>
+              <div class="controls-row" style="margin-top: 8px; justify-content: flex-start; width: 100%;">
+                <button id="add-broken-pixel-color-btn" class="app-btn" type="button" style="padding: 4px 8px; font-size: 14px;">+</button>
+                <button id="pick-broken-pixel-color-tool-btn" class="app-btn" type="button" style="padding: 4px 8px; font-size: 14px;">Pick Color</button>
+                <button id="clear-broken-pixel-list-btn" class="app-btn" type="button" style="padding: 4px 8px; font-size: 14px;">Clear List</button>
+              </div>
+            </div>
+
+            <div class="controls-grid" style="margin-top: 8px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+              <div class="controls-row" style="align-items: center;">
+                <div class="select-mode-wrap">
+                  <span class="select-mode-label">Broken Pixel Paint</span>
+                  <button id="broken-pixel-paint-toggle" class="select-mode-track" type="button" role="switch" aria-checked="false" aria-label="Broken Pixel">
+                    <span class="select-mode-knob"></span>
+                  </button>
+                </div>
+              </div>
+              <div class="controls-row" style="align-items: center;">
+                <div class="select-mode-wrap">
+                  <span class="select-mode-label">Priority Color Paint</span>
+                  <button id="priority-color-paint-toggle" class="select-mode-track" type="button" role="switch" aria-checked="false" aria-label="Priority Color">
+                    <span class="select-mode-knob"></span>
+                  </button>
+                </div>
+              </div>
+              <div class="controls-row" style="align-items: center;">
+                <div class="select-mode-wrap">
+                  <span class="select-mode-label">Chess Pattern Paint</span>
+                  <button id="chess-paint-toggle" class="select-mode-track" type="button" role="switch" aria-checked="false" aria-label="Chess Pattern Paint">
+                    <span class="select-mode-knob"></span>
+                  </button>
+                </div>
+              </div>
+              <div class="controls-row" style="align-items: center;">
+                <div class="select-mode-wrap">
+                  <span class="select-mode-label">Limit to Overlay Area</span>
+                  <button id="limit-overlay-toggle" class="select-mode-track" type="button" role="switch" aria-checked="false" aria-label="Limit to Overlay Area">
+                    <span class="select-mode-knob"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="controls-row" style="margin-top: 8px;">
+              <span class="select-mode-label">Minizine to Detect (pixels)</span>
+              <input type="number" id="minizine-to-detect-input" value="4" min="1" max="100" style="width: 60px; margin-left: 8px;">
+            </div>
+
+            <div class="controls-row" style="margin-top: 8px;">
+              <button id="remove-duplicates-btn" class="app-btn" type="button">Remove Duplicates</button>
             </div>
           </div>
         </div>
@@ -882,6 +1063,10 @@
       </div>
       <div class="modal-body">
         <div id="accounts-section">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; justify-content: flex-start;">
+            <label for="update-interval-input" data-i18n="settings.updateIntervalSeconds">Update Interval (seconds):</label>
+            <input type="number" id="update-interval-input" min="1" value="20" style="width: 80px;" />
+          </div>
           <div class="accounts-actions">
             <button id="btn-account-add" class="app-btn" type="button" data-i18n="accounts.add">Hesap ekle</button>
             <button id="btn-check-all" class="app-btn" type="button" data-i18n-title="accounts.checkAllTitle"><span class="label" data-i18n="accounts.checkAll">Check All Accounts</span> <span class="spin-indicator">⟳</span></button>
@@ -911,6 +1096,11 @@
             <label for="account-cf-input">cf_clearance</label>
             <input id="account-cf-input" type="text" placeholder="cf_clearance" />
             <input id="account-id-input" type="hidden" />
+            <label for="account-active-toggle">Active</label>
+            <label class="toggle" aria-label="Active">
+              <input id="account-active-toggle" type="checkbox" checked />
+              <span class="slider"></span>
+            </label>
           </div>
           <div class="modal-footer split">
             <button id="btn-account-cancel" class="app-btn" type="button" data-i18n="buttons.back">Geri</button>
@@ -991,6 +1181,10 @@
               <input id="img-width" type="number" min="1" max="1000" step="1" />
               <label for="img-height" data-i18n="preview.height">Yükseklik</label>
               <input id="img-height" type="number" min="1" max="1000" step="1" />
+              <label for="img-template-x" data-i18n="template.xCoord">X Koordinatı</label>
+              <input id="img-template-x" type="number" step="1" value="0" />
+              <label for="img-template-y" data-i18n="template.yCoord">Y Koordinatı</label>
+              <input id="img-template-y" type="number" step="1" value="0" />
               <label for="img-alpha-input" data-i18n="preview.alphaThreshold">Transparency</label>
               <input id="img-alpha-input" type="number" min="0" max="255" step="1" value="5" />
               <label for="img-color-metric" data-i18n="preview.colorMetric">Color algorithm</label>
@@ -1039,10 +1233,16 @@
 
     <button class="app-btn" type="submit" data-i18n="form.fetchButton">Getir</button>
     <button class="app-btn" type="button" id="btn-upload-sign" data-i18n="form.uploadImage">Resim yükle</button>
+    <button class="app-btn" type="button" id="btn-upload-template">Upload Template</button>
   </form>
+  <input id="template-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
  
   <div id="app-toast-container" aria-live="polite" aria-atomic="true"></div>
   <div id="color-palette" aria-label="Renk paleti" role="group" data-i18n-aria-label="labels.colorPalette"></div>
+   <!-- Eraser Button -->
+   <button id="eraser-button" class="btn btn-lg btn-square shadow-md" title="Tẩy">
+     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" class="size-5"><path d="M690-240h190v80H610l80-80Zm-500 80-85-85q-23-23-23.5-57t22.5-58l440-456q23-24 56.5-24t56.5 23l199 199q23 23 23 57t-23 57L520-160H190Zm296-80 314-322-198-198-442 456 64 64h262Zm-6-240Z"/></svg>
+   </button>
   <div id="palette-mode" class="palette-mode-wrap" aria-label="Palette mode" style="bottom:76px; left:50%; transform:translateX(-50%); visibility:hidden;">
     <span id="palette-mode-label-left" class="palette-mode-label active" data-i18n="paletteMode.premium">Use premium color</span>
     <button id="palette-mode-toggle" class="palette-mode-track" type="button" role="switch" aria-checked="true" aria-label="Palette mode"><span class="palette-mode-knob"></span></button>
@@ -1094,6 +1294,7 @@
     const LANGS = [
       { value: 'tr', label: 'Türkçe' },
       { value: 'en', label: 'English' },
+      { value: 'vi', label: 'Tiếng Việt' },
       { value: 'de', label: 'Deutsch' },
       { value: 'es', label: 'Español' },
       { value: 'fr', label: 'Français' },
@@ -1176,6 +1377,30 @@
         try { sel.value = I18N_LANG; } catch {}
         sel.addEventListener('change', async () => { await setLanguage(sel.value); });
       }
+    }
+    const updateIntervalInput = document.getElementById('update-interval-input');
+    if (updateIntervalInput) {
+      updateIntervalInput.addEventListener('change', async (e) => {
+        const value = parseInt(e.target.value, 10);
+        if (isNaN(value) || value <= 0) {
+          showToast(t('messages.invalidUpdateInterval'), 'error', 2000);
+          return;
+        }
+        try {
+          const res = await fetch('/api/settings/update-interval', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updateIntervalMinutes: value })
+          });
+          if (res.ok) {
+            showToast(t('messages.updateIntervalSaved'), 'success', 1500);
+          } else {
+            showToast(t('messages.updateIntervalSaveFailed'), 'error', 2500);
+          }
+        } catch (err) {
+          showToast(t('messages.updateIntervalSaveFailed'), 'error', 2500);
+        }
+      });
     }
 
     
@@ -1447,6 +1672,8 @@
     const pixelSelectedList = document.getElementById('pixel-selected-list');
     const selectionOverlay = document.getElementById('selection-overlay');
     const selectionCtx = selectionOverlay ? selectionOverlay.getContext('2d', { willReadFrequently: true }) : null;
+    const eraserButton = document.getElementById('eraser-button');
+    let isEraserMode = false;
     function resizeSelectionOverlay(){
       try {
         if (!selectionOverlay) return;
@@ -1983,18 +2210,44 @@
       return im;
     })();
 
+   // Auto Paint elements
+   const brokenPixelPaintToggle = document.getElementById('broken-pixel-paint-toggle');
+   const priorityColorPaintToggle = document.getElementById('priority-color-paint-toggle');
+   const chessPaintToggle = document.getElementById('chess-paint-toggle');
+   const limitOverlayToggle = document.getElementById('limit-overlay-toggle');
+   const removeDuplicatesBtn = document.getElementById('remove-duplicates-btn');
+   const colorPriorityListEl = document.getElementById('color-priority-list');
+   const addPriorityColorBtn = document.getElementById('add-priority-color-btn');
+   const pickColorToolBtn = document.getElementById('pick-color-tool-btn');
+   const clearPriorityListBtn = document.getElementById('clear-priority-list-btn');
+   const brokenPixelPriorityListEl = document.getElementById('broken-pixel-priority-list');
+   const addBrokenPixelColorBtn = document.getElementById('add-broken-pixel-color-btn');
+   const clearBrokenPixelListBtn = document.getElementById('clear-broken-pixel-list-btn');
+   const minizineToDetectInput = document.getElementById('minizine-to-detect-input');
+
+   // Auto Paint state variables
+   let brokenPixelPaintEnabled = false;
+   let priorityColorPaintEnabled = false;
+   let priorityColors = []; // Stores color IDs
+   let brokenPixelPriorityColors = []; // Stores broken pixel priority color IDs
+   let minizineToDetectThreshold = 4; // Default value
+   let isPickingColorMode = false; // New state for pick color tool
+   let isPickingBrokenPixelColorMode = false; // New state for broken pixel pick color tool
+
+     let readyHoverPixel = { x: null, y: null };
     
-    let readyHoverPixel = { x: null, y: null };
+     let selectedOverrideColorId = null;
     
-    let selectedOverrideColorId = null;
-    
-    let readyGlobalMode = false;
-    const readyGlobalSelected = new Map(); 
-    let readyMouseDownPt = null;
-    let readyMouseMoved = false;
-    let autoSelectDeleteMode = false;
-    const READY_CLICK_MOVE_TOLERANCE = 4;
-    function getPaletteRgbById(id){
+     let readyGlobalMode = false;
+     const readyGlobalSelected = new Map();
+     let readyMouseDownPt = null;
+     let readyMouseMoved = false;
+     let autoSelectDeleteMode = false;
+     const READY_CLICK_MOVE_TOLERANCE = 4;
+     const PRIORITY_COLORS_STORAGE_KEY = 'autoPaint.priorityColors';
+     const BROKEN_PIXEL_COLORS_STORAGE_KEY = 'autoPaint.brokenPixelPriorityColors';
+
+     function getPaletteRgbById(id){
       const arr = (ACTIVE_PALETTE && Array.isArray(ACTIVE_PALETTE)) ? ACTIVE_PALETTE : PALETTE;
       for (let i = 0; i < arr.length; i++) { if (arr[i].id === id) return arr[i].rgb; }
       return [255,255,255];
@@ -2192,11 +2445,48 @@
       } catch {}
       return getBasePixelColorAtWorld(wx, wy);
     }
+    function getItemPixelPaletteId(item, sx, sy){
+      const c = getItemPixelColor(item, sx, sy);
+      if (!c || c.a === 0) return null;
+      return rgbToPaletteId(c.r, c.g, c.b);
+    }
+    // Lấy màu từ canvas hoặc từ hình ảnh sign nếu canvas trong suốt tại đó
+    function getColorAtWorld(wx, wy) {
+        // Lấy màu từ canvas chính
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const pixelData = ctx.getImageData(wx, wy, 1, 1).data;
+
+        // Nếu pixel trên canvas chính không trong suốt, trả về màu đó
+        if (pixelData[3] > 0) {
+            return { r: pixelData[0], g: pixelData[1], b: pixelData[2], a: pixelData[3] };
+        }
+
+        // Nếu canvas trong suốt, thử lấy màu từ hình ảnh sign (nếu có và hiển thị)
+        if (sign && !sign.hidden && sign.naturalWidth && sign.naturalHeight) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = sign.naturalWidth;
+            tempCanvas.height = sign.naturalHeight;
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            tempCtx.drawImage(sign, 0, 0);
+            
+            // Chuyển đổi world coordinates sang local coordinates của sign image
+            const signX = Math.floor(wx - (signItems[selectedIndex]?.worldX || 0));
+            const signY = Math.floor(wy - (signItems[selectedIndex]?.worldY || 0));
+
+            if (signX >= 0 && signX < sign.naturalWidth && signY >= 0 && signY < sign.naturalHeight) {
+                const signPixelData = tempCtx.getImageData(signX, signY, 1, 1).data;
+                if (signPixelData[3] > 0) {
+                    return { r: signPixelData[0], g: signPixelData[1], b: signPixelData[2], a: signPixelData[3] };
+                }
+            }
+        }
+        return null;
+    }
+
     function logSelectionDetails(item, sx, sy){  }
 
     function worldToScreen(wx, wy){
-      const rect = canvas.getBoundingClientRect();
-      return { x: rect.left + state.translateX + wx * state.scale, y: rect.top + state.translateY + wy * state.scale };
+      return { x: canvas.offsetLeft + state.translateX + wx * state.scale, y: canvas.offsetTop + state.translateY + wy * state.scale };
     }
 
     function hitOverlayAt(worldX, worldY){
@@ -2473,6 +2763,13 @@
           });
         }
       } catch {}
+      // Add selected overlay as an allowed placement rectangle
+      try {
+        if (selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible) {
+          const overlayRect = savedOverlays[selectedOverlayIndex].rect;
+          rects.push({ x0: overlayRect.x, y0: overlayRect.y, x1: overlayRect.x + overlayRect.w, y1: overlayRect.y + overlayRect.h });
+        }
+      } catch {}
       // Always cap to 3x3 region around base tile to match visual clipping
       try {
         const w = img ? (img.width|0) : 0;
@@ -2530,30 +2827,49 @@
     }
 
     function snapItemToNearest(item, targetX, targetY){
-      const baseId = ensureBaseImageData();
-      const id = ensureItemImageData(item);
-      
+      let nx = Math.round(targetX || 0), ny = Math.round(targetY || 0);
+
       if (!img) {
-        return { x: Math.round(targetX || 0), y: Math.round(targetY || 0) };
+        return { x: nx, y: ny };
       }
+
       const rects = getAllowedPlacementRects();
-      const bounds = getCompositeBounds(rects);
-      if (!id || !baseId) {
-        const iw = id && id.width ? id.width : 0;
-        const ih = id && id.height ? id.height : 0;
-        const minXb = (bounds.minX|0) - iw + 1;
-        const minYb = (bounds.minY|0) - ih + 1;
-        const maxXb = (bounds.maxX|0) - 1;
-        const maxYb = (bounds.maxY|0) - 1;
-        const rxFallback = Math.round(Math.min(Math.max(minXb, targetX), maxXb));
-        const ryFallback = Math.round(Math.min(Math.max(minYb, targetY), maxYb));
-        const xOk = isPartiallyWithinAllowedPlacement(rxFallback, ryFallback, iw, ih, 1);
-        if (xOk) return { x: rxFallback, y: ryFallback };
-        // If clamped point not inside allowed rects, fall back to 0,0 within base
-        return { x: Math.max(0, Math.min((img.width|0) - (id && id.width ? id.width : 0), rxFallback)), y: Math.max(0, Math.min((img.height|0) - (id && id.height ? id.height : 0), ryFallback)) };
+      // If there are no allowed placement rectangles (e.g., no base image or overlays),
+      // or if there's a selected overlay, strictly clamp to that overlay's bounds.
+      if (!rects || rects.length === 0 || (selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible)) {
+        const iw = item.image ? (item.image.naturalWidth || 0) : 0;
+        const ih = item.image ? (item.image.naturalHeight || 0) : 0;
+        
+        // If an overlay is selected, clamp to its bounds
+        if (selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible) {
+          const overlayRect = savedOverlays[selectedOverlayIndex].rect;
+          const minXo = overlayRect.x;
+          const minYo = overlayRect.y;
+          const maxXo = overlayRect.x + overlayRect.w - iw;
+          const maxYo = overlayRect.y + overlayRect.h - ih;
+
+          nx = Math.min(Math.max(minXo, nx), maxXo);
+          ny = Math.min(Math.max(minYo, ny), maxYo);
+        } else { // Fallback to base image bounds if no specific overlay is selected
+          const minXb = 0;
+          const minYb = 0;
+          const maxXb = img.width - iw;
+          const maxYb = img.height - ih;
+
+          nx = Math.min(Math.max(minXb, nx), maxXb);
+          ny = Math.min(Math.max(minYb, ny), maxYb);
+        }
+        return { x: nx, y: ny };
       }
-      const minXb = (bounds.minX|0) - id.width + 1;
-      const minYb = (bounds.minY|0) - id.height + 1;
+
+      // Original snapping logic for multiple allowed rectangles (3x3 grid, etc.)
+      const bounds = getCompositeBounds(rects);
+      const id = ensureItemImageData(item);
+      const iw = id && id.width ? id.width : 0;
+      const ih = id && id.height ? id.height : 0;
+
+      const minXb = (bounds.minX|0) - iw + 1;
+      const minYb = (bounds.minY|0) - ih + 1;
       const maxXb = (bounds.maxX|0) - 1;
       const maxYb = (bounds.maxY|0) - 1;
       const rx = Math.round(Math.min(Math.max(minXb, targetX), maxXb));
@@ -2562,15 +2878,15 @@
       const radius = 2;
       const minX = Math.max(minXb, rx - radius), maxXn = Math.min(maxXb, rx + radius);
       const minY = Math.max(minYb, ry - radius), maxYn = Math.min(maxYb, ry + radius);
-      const stride = Math.max(1, Math.floor(Math.min(id.width, id.height) / 64));
+      const stride = Math.max(1, Math.floor(Math.min(iw, ih) / 64)); // Use iw, ih here
       for (let oy = minY; oy <= maxYn; oy++) {
         for (let ox = minX; ox <= maxXn; ox++) {
-          if (!isPartiallyWithinAllowedPlacement(ox, oy, id.width, id.height, 1)) continue;
+          if (!isPartiallyWithinAllowedPlacement(ox, oy, iw, ih, 1)) continue; // Use iw, ih here
           let score = 0;
-          for (let sy = 0; sy < id.height; sy += stride) {
+          for (let sy = 0; sy < ih; sy += stride) { // Use ih here
             const by = oy + sy;
-            let iItem = ((id.width * sy) << 2);
-            for (let sx = 0; sx < id.width; sx += stride) {
+            let iItem = ((iw * sy) << 2); // Use iw here
+            for (let sx = 0; sx < iw; sx += stride) { // Use iw here
               const a = id.data[iItem + 3];
               if (a !== 0) {
                 const r1 = id.data[iItem], g1 = id.data[iItem+1], b1 = id.data[iItem+2];
@@ -2765,16 +3081,25 @@
       colorPaletteEl.innerHTML = '';
       
       const swT = document.createElement('div');
-      swT.className = 'palette-swatch transparent selected';
+      //swT.className = 'palette-swatch transparent selected';
+      swT.className = 'palette-swatch transparent'; // Bỏ 'selected' mặc định
       swT.title = t('palette.transparentTitle');
       swT.setAttribute('role', 'button');
       swT.addEventListener('click', () => {
+        // Chuyển đổi trạng thái isEraserMode
+        isEraserMode = !isEraserMode; 
+        updateEraserButtonUi(); // Cập nhật UI nút tẩy
+        if (isEraserMode) {
+            selectedOverrideColorId = null; // Chọn màu trong suốt
+        } else {
+            // Nếu thoát chế độ tẩy, chọn lại màu mặc định hoặc màu đã chọn trước đó (nếu có)
+            selectedOverrideColorId = parseInt(localStorage.getItem('palette.selectedColorId') || PALETTE[0].id, 10);
+        }
         try {
           const rp = document.getElementById('ready-popup');
           const wasReadyOpen = !!(rp && !rp.hidden);
           const wasGlobal = !!readyGlobalMode;
           const hadGlobalSelections = !!(readyGlobalSelected && readyGlobalSelected.size > 0);
-          selectedOverrideColorId = null;
           
           readyGlobalMode = false;
           // Switch back to per-image mode without generic resets
@@ -2796,6 +3121,9 @@
           }
         } catch {
           selectedOverrideColorId = null;
+          if (!isEraserMode) { // Nếu không phải chế độ tẩy, khôi phục màu đã chọn trước đó
+             selectedOverrideColorId = parseInt(localStorage.getItem('palette.selectedColorId') || PALETTE[0].id, 10);
+          }
           readyGlobalMode = false;
           updatePaletteSelectionUi();
           try { updateReadyButtonEnabled(); } catch {}
@@ -2804,6 +3132,23 @@
         }
       });
       colorPaletteEl.appendChild(swT);
+      // Thêm event listener cho nút tẩy
+      if (eraserButton) {
+          eraserButton.addEventListener('click', () => {
+              isEraserMode = !isEraserMode;
+              updateEraserButtonUi();
+              if (isEraserMode) {
+                  selectedOverrideColorId = null; // Chế độ tẩy = màu trong suốt
+              } else {
+                  selectedOverrideColorId = parseInt(localStorage.getItem('palette.selectedColorId') || PALETTE[0].id, 10); // Khôi phục màu đã chọn
+              }
+              updatePaletteSelectionUi();
+              try { updateReadyButtonEnabled(); } catch {}
+              try { updateReadySelectionLabel(); } catch {}
+              try { updatePixelMarkers(); } catch {}
+          });
+      }
+
       
       const arr = (ACTIVE_PALETTE && Array.isArray(ACTIVE_PALETTE)) ? ACTIVE_PALETTE : PALETTE;
       for (let i = 0; i < arr.length; i++){
@@ -2887,6 +3232,20 @@
         const isSelected = (idAttr == null && selectedOverrideColorId == null) || (idAttr != null && id === selectedOverrideColorId);
         sw.classList.toggle('selected', !!isSelected);
       });
+    }
+
+    const COLOR_DIFFERENCE_THRESHOLD = 50; // Ngưỡng khác biệt màu sắc (tùy chỉnh)
+
+    function areColorsSignificantlyDifferent(color1, color2, threshold = COLOR_DIFFERENCE_THRESHOLD) {
+      if (!color1 || !color2) return true; // Nếu một trong hai màu không tồn tại, coi là khác biệt
+      // Chuyển đổi RGB sang LAB để tính toán khoảng cách màu chính xác hơn
+      const lab1 = srgbToLab(color1.r, color1.g, color1.b);
+      const lab2 = srgbToLab(color2.r, color2.g, color2.b);
+      
+      // Tính toán khoảng cách Delta E 2000
+      const deltaE = ciede2000(lab1, lab2);
+      
+      return deltaE > threshold;
     }
 
     function squaredDistance(r1,g1,b1, r2,g2,b2){
@@ -3492,6 +3851,7 @@
       try { drawNineGridOverlay(); } catch {}
 
       try { updatePixelMarkers(); } catch {}
+      try { updateRangeOverlayPosition(); } catch {}
       try { autoUnlockNeighborsBasedOnSigns(); } catch {}
     }
 
@@ -3916,6 +4276,7 @@ function hasSavedView(){
 }
 
 function loadImage(area, no, preserveView = false) {
+  if (!area || !no) return;
   const url = buildUrl(area, no);
   const image = new Image();
 
@@ -3997,6 +4358,78 @@ function loadImage(area, no, preserveView = false) {
       const py = e.clientY - rect.top;
       const worldX = (px - state.translateX) / state.scale;
       const worldY = (py - state.translateY) / state.scale;
+
+      // Handle clicks for picking colors (both priority and broken pixel)
+      if (isPickingColorMode || isPickingBrokenPixelColorMode) {
+          // Prevent other canvas click handlers from firing
+          e.stopPropagation();
+          
+          let pickedColor = null;
+          // Try to get color from the selected sign item's original image data
+          if (selectedIndex >= 0 && selectedIndex < signItems.length) {
+              const selItem = signItems[selectedIndex];
+              const lx = Math.floor(worldX - (selItem.worldX || 0));
+              const ly = Math.floor(worldY - (selItem.worldY || 0));
+              if (lx >= 0 && ly >= 0 && lx < selItem.image.naturalWidth && ly < selItem.image.naturalHeight) {
+                  pickedColor = getItemPixelColor(selItem, lx, ly);
+              }
+          }
+          // Fallback to world color if no sign item is selected or pixel is transparent
+          if (!pickedColor || pickedColor.a === 0) {
+              pickedColor = getColorAtWorld(worldX, worldY);
+          }
+
+          if (pickedColor && pickedColor.a > 0) { // Ensure color is not transparent
+              const paletteId = rgbToPaletteId(pickedColor.r, pickedColor.g, pickedColor.b);
+              if (paletteId != null) {
+                  if (isPickingColorMode) {
+                      if (!priorityColors.includes(paletteId)) {
+                          priorityColors.push(paletteId);
+                          savePriorityColors();
+                          renderPriorityColors();
+                          showToast(t('messages.colorAddedToPriorityList'), 'success', 2000);
+                      } else {
+                          showToast(t('messages.colorAlreadyInPriorityList'), 'info', 2000);
+                      }
+                  } else if (isPickingBrokenPixelColorMode) {
+                      if (!brokenPixelPriorityColors.includes(paletteId)) {
+                          brokenPixelPriorityColors.push(paletteId);
+                          saveBrokenPixelColors();
+                          renderBrokenPixelColors();
+                          showToast(t('messages.colorAddedToBrokenPixelList'), 'success', 2000);
+                      } else {
+                          showToast(t('messages.colorAlreadyInBrokenPixelList'), 'info', 2000);
+                      }
+                  }
+              }
+          } else {
+              showToast(t('messages.noColorAtLocation'), 'error', 2000);
+          }
+          // Turn off picking mode after a successful pick
+          isPickingColorMode = false;
+          isPickingBrokenPixelColorMode = false;
+          canvas.style.cursor = '';
+          return; // Exit to prevent further canvas event processing
+      }
+
+      if (isDrawingOverlay) {
+          // Clamp world coordinates to image bounds
+          const clampedWorldX = Math.min(img.width * 2, Math.max(-img.width, worldX));
+          const clampedWorldY = Math.min(img.height * 2, Math.max(-img.height, worldY));
+
+          overlayStartX = clampedWorldX;
+          overlayStartY = clampedWorldY;
+          rangeOverlay.hidden = false;
+          
+          // Initial position on screen, converted from clamped world coordinates
+          const initialScreenPos = worldToScreen(overlayStartX, overlayStartY);
+          rangeOverlay.style.left = initialScreenPos.x + 'px';
+          rangeOverlay.style.top = initialScreenPos.y + 'px';
+          rangeOverlay.style.width = '1px';
+          rangeOverlay.style.height = '1px';
+          return;
+      }
+
       // Lock button click on hovered neighbor cell
       try {
         if (e.button === 0 && isOverLockButton(worldX, worldY)) {
@@ -4005,6 +4438,7 @@ function loadImage(area, no, preserveView = false) {
           return;
         }
       } catch {}
+
       
       if (isReadyOpen()) {
         readyMouseDownPt = { screenX: e.clientX, screenY: e.clientY, worldX, worldY, button: e.button };
@@ -4123,6 +4557,29 @@ function loadImage(area, no, preserveView = false) {
     });
     canvas.addEventListener('contextmenu', (e) => { if (isReadyOpen()) { e.preventDefault(); } });
     window.addEventListener('mousemove', (e) => {
+      if (isDrawingOverlay) {
+          const rect = canvas.getBoundingClientRect();
+          const px = e.clientX - rect.left;
+          const py = e.clientY - rect.top;
+          const worldX = (px - state.translateX) / state.scale;
+          const worldY = (py - state.translateY) / state.scale;
+
+          // Clamp world coordinates to image bounds
+          const clampedWorldX = Math.min(img.width * 2, Math.max(-img.width, worldX));
+          const clampedWorldY = Math.min(img.height * 2, Math.max(-img.height, worldY));
+
+          const x = Math.min(overlayStartX, clampedWorldX);
+          const y = Math.min(overlayStartY, clampedWorldY);
+          const w = Math.abs(clampedWorldX - overlayStartX);
+          const h = Math.abs(clampedWorldY - overlayStartY);
+
+          const p = worldToScreen(x, y);
+          rangeOverlay.style.left = p.x + 'px';
+          rangeOverlay.style.top = p.y + 'px';
+          rangeOverlay.style.width = (w * state.scale) + 'px';
+          rangeOverlay.style.height = (h * state.scale) + 'px';
+          return;
+      }
       if (isReadyOpen()) {
         if (readyMouseDownPt) {
           const moveDx = Math.abs(e.clientX - readyMouseDownPt.screenX);
@@ -4235,8 +4692,27 @@ function loadImage(area, no, preserveView = false) {
         state.lastY = e.clientY;
         document.body.classList.add('dragging');
       }
-      if (!signDragging) return;
-      if (isReadyOpen()) {
+      // Xử lý kéo ảnh
+      if (signDragging) {
+        // Nếu ready popup đang mở và ở chế độ global, chuyển sang chế độ kéo bản đồ
+        if (isReadyOpen() && readyGlobalMode) {
+          signDragging = false; // Ngừng kéo ảnh
+          state.dragging = true; // Bắt đầu kéo bản đồ
+          state.lastX = e.clientX; // Cập nhật vị trí chuột cho kéo bản đồ
+          state.lastY = e.clientY;
+          document.body.classList.add('dragging');
+          render(); // Render lại để cập nhật trạng thái
+          updatePixelMarkers();
+          updateCanvasCursorAt(worldX, worldY);
+          return; // Thoát, xử lý kéo bản đồ ở lượt tiếp theo của mousemove
+        }
+        // Nếu không ở chế độ global hoặc ready popup không mở, tiếp tục kéo ảnh
+      }
+      // Xử lý kéo bản đồ (được kích hoạt nếu signDragging là false)
+      else if (state.dragging) {
+        // Logic kéo bản đồ hiện tại (đã nằm trong khối này)
+      } else {
+        // Nếu không có hành động kéo nào đang diễn ra, thoát
         return;
       }
       const rect = canvas.getBoundingClientRect();
@@ -4260,6 +4736,53 @@ function loadImage(area, no, preserveView = false) {
       }
     });
     window.addEventListener('mouseup', (e) => {
+      if (isDrawingOverlay) {
+          isDrawingOverlay = false;
+          canvas.style.cursor = '';
+          rangeOverlay.hidden = true;
+
+          const rect = canvas.getBoundingClientRect();
+          const px = e.clientX - rect.left;
+          const py = e.clientY - rect.top;
+          const worldX = (px - state.translateX) / state.scale;
+          const worldY = (py - state.translateY) / state.scale;
+
+          // Clamp final world coordinates to image bounds
+          const clampedWorldX = Math.min(img.width * 2, Math.max(-img.width, worldX));
+          const clampedWorldY = Math.min(img.height * 2, Math.max(-img.height, worldY));
+
+          const x = Math.min(overlayStartX, clampedWorldX);
+          const y = Math.min(overlayStartY, clampedWorldY);
+          const w = Math.abs(clampedWorldX - overlayStartX);
+          const h = Math.abs(clampedWorldY - overlayStartY);
+
+          if (w > 0 && h > 0) {
+              const overlayName = prompt("Enter a name for the overlay:", `Overlay ${savedOverlays.length + 1}`);
+              if (overlayName !== null) {
+                  const newOverlay = {
+                      id: Date.now(), // Unique ID for the overlay
+                      name: overlayName,
+                      rect: {
+                          x: Math.round(x),
+                          y: Math.round(y),
+                          w: Math.round(w),
+                          h: Math.round(h)
+                      },
+                      isVisible: true, // Default to visible
+                      isSaved: false, // Default to not saved
+                      imageData: null // Placeholder for image data
+                  };
+                  savedOverlays.push(newOverlay);
+                  selectedOverlayIndex = savedOverlays.length - 1; // Select the newly added overlay
+                  saveOverlaysToStorage();
+                  renderOverlayList();
+                  updateRangeOverlayPosition();
+                  // Capture the image data for the new overlay
+                  captureOverlayImageData(newOverlay);
+              }
+          }
+          return;
+      }
       if (resizingItem) {
         const w = Math.max(1, resizingItem.displayWidth || resizingItem.image.naturalWidth);
         const h = Math.max(1, resizingItem.displayHeight || resizingItem.image.naturalHeight);
@@ -4317,7 +4840,7 @@ function loadImage(area, no, preserveView = false) {
               const lx = Math.floor(worldX - (selItem.worldX || 0));
               const ly = Math.floor(worldY - (selItem.worldY || 0));
               if (lx >= 0 && ly >= 0 && lx < selItem.image.naturalWidth && ly < selItem.image.naturalHeight) {
-                if (isOpaquePixel(selItem, lx, ly) && (selectedOverrideColorId != null || !isSameColorAsBase(selItem, lx, ly))) {
+                if (isOpaquePixel(selItem, lx, ly) && (selectedOverrideColorId != null || !isSamePaletteIdAsBase(selItem, lx, ly))) {
                   const limit = Math.max(0, Number(getReadySelectionLimit()) || 0);
                   const map = getSelectedMap(selItem);
                   const already = map ? map.size : 0;
@@ -4461,6 +4984,7 @@ function loadImage(area, no, preserveView = false) {
     window.addEventListener('resize', () => {
       render();
       updatePixelMarkers();
+      updateDimOverlay(); /* Cập nhật dim overlay khi thay đổi kích thước cửa sổ */
     });
 
     // Persist view pan/zoom changes periodically
@@ -4901,6 +5425,8 @@ function loadImage(area, no, preserveView = false) {
         accountTokenInput.value = row.token || '';
         if (accountCfInput) accountCfInput.value = row.cf_clearance || '';
         accountIdInput.value = String(row.id || '');
+        const accountActiveToggle = document.getElementById('account-active-toggle');
+        if (accountActiveToggle) accountActiveToggle.checked = row.active !== false;
         accountNameInput.focus();
       } catch {}
       
@@ -5598,7 +6124,39 @@ function loadImage(area, no, preserveView = false) {
         const isActive = row && row.active !== false;
         tdPixel.textContent = (count == null || max == null) ? '-' : (String(count) + ' / ' + String(max));
         const tdStatus = document.createElement('td');
-        tdStatus.textContent = isActive ? t('table.statusActive') : t('table.statusPassive');
+        // Add a toggle switch for active status
+        const toggleLabel = document.createElement('label');
+        toggleLabel.className = 'toggle';
+        const toggleInput = document.createElement('input');
+        toggleInput.type = 'checkbox';
+        toggleInput.checked = isActive;
+        toggleInput.addEventListener('change', async (e) => {
+          const newStatus = e.target.checked;
+          try {
+            const res = await fetch('/api/accounts/' + row.id, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ active: newStatus })
+            });
+            if (res.ok) {
+              row.active = newStatus; // Update local state
+              showToast(t('messages.statusUpdated'), 'success', 1500);
+              loadAccounts(); // Re-render table to reflect changes
+            } else {
+              showToast(t('messages.statusUpdateFailed'), 'error', 2500);
+              toggleInput.checked = !newStatus; // Revert toggle if update fails
+            }
+          } catch (err) {
+            showToast(t('messages.statusUpdateFailed'), 'error', 2500);
+            toggleInput.checked = !newStatus; // Revert toggle on network error
+          }
+        });
+        const toggleSlider = document.createElement('span');
+        toggleSlider.className = 'slider';
+        toggleLabel.appendChild(toggleInput);
+        toggleLabel.appendChild(toggleSlider);
+        tdStatus.appendChild(toggleLabel);
+
         const tdActions = document.createElement('td');
         const actionsWrap = document.createElement('div');
         actionsWrap.className = 'table-actions';
@@ -5698,6 +6256,18 @@ function loadImage(area, no, preserveView = false) {
         const res = await fetch('/api/accounts');
         const data = await res.json();
         if (Array.isArray(data)) renderAccountsTable(data);
+
+        // Fetch settings and populate update interval input
+        const settingsRes = await fetch('/api/settings');
+        if (settingsRes.ok) {
+          const settings = await settingsRes.json();
+          if (settings && typeof settings.updateIntervalMinutes === 'number') {
+            const updateIntervalInput = document.getElementById('update-interval-input');
+            if (updateIntervalInput) {
+              updateIntervalInput.value = String(settings.updateIntervalMinutes);
+            }
+          }
+        }
       } catch {}
     }
     async function refreshAccountById(accountId){
@@ -5755,6 +6325,7 @@ function loadImage(area, no, preserveView = false) {
         const name = (accountNameInput.value || '').trim();
         const token = (accountTokenInput.value || '').trim();
         const cf_clearance = (accountCfInput && accountCfInput.value) ? accountCfInput.value.trim() : '';
+        const active = (document.getElementById('account-active-toggle').checked); // Get active status
         if (!name || !token || !cf_clearance || cf_clearance.length < 30) {
           showToast('cf_clearance zorunlu (min 30 karakter).', 'error', 2500);
           return;
@@ -5776,7 +6347,7 @@ function loadImage(area, no, preserveView = false) {
             const res = await fetch('/api/accounts/' + id, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name, token, cf_clearance })
+              body: JSON.stringify({ name, token, cf_clearance, active })
             });
             if (!res.ok) return;
             try { await fetch('/api/accounts/' + id + '/refresh', { method: 'POST' }); } catch {}
@@ -5784,7 +6355,7 @@ function loadImage(area, no, preserveView = false) {
             const res = await fetch('/api/accounts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name, token, cf_clearance })
+              body: JSON.stringify({ name, token, cf_clearance, active })
             });
             if (!res.ok) return;
             try {
@@ -5877,6 +6448,8 @@ function loadImage(area, no, preserveView = false) {
     const imgAlphaInput = document.getElementById('img-alpha-input');
     const imgColorMetricSelect = document.getElementById('img-color-metric');
     const imgDitherToggle = document.getElementById('img-dither-toggle');
+    const imgTemplateXInput = document.getElementById('img-template-x'); // Added
+    const imgTemplateYInput = document.getElementById('img-template-y'); // Added
     let imgDitherEnabled = false;
     let imgFillColorId = null; // null => none, number => palette id
     let previewSourceImage = null;
@@ -5888,8 +6461,9 @@ function loadImage(area, no, preserveView = false) {
       imgDitherToggle.dataset.state = imgDitherEnabled ? 'on' : 'off';
     }
 
-    function openImagePreview(image, filename){
+    function openImagePreview(image, filename, isTemplate = false){
       previewSourceImage = image;
+      imgPreviewApply._isTemplate = isTemplate;
       const w = image.naturalWidth|0;
       const h = image.naturalHeight|0;
       try { imgWidthInput.value = String(w); } catch {}
@@ -5924,74 +6498,80 @@ function loadImage(area, no, preserveView = false) {
       octx.imageSmoothingEnabled = false;
       octx.drawImage(previewSourceImage, 0, 0, previewSourceImage.naturalWidth, previewSourceImage.naturalHeight, 0, 0, targetW, targetH);
       try {
-        const id = octx.getImageData(0, 0, targetW, targetH);
-        const data = id.data;
-        const alphaTh = imgAlphaInput ? parseInt(imgAlphaInput.value||'0',10) : 0;
-        for (let i = 0; i < data.length; i += 4) {
-          data[i+3] = (data[i+3] <= alphaTh) ? 0 : 255;
-        }
-        const metric = imgColorMetricSelect ? imgColorMetricSelect.value : 'oklab';
-        if (imgDitherEnabled) {
-          const w2 = targetW + 2;
-          const errCurrR = new Float32Array(w2), errCurrG = new Float32Array(w2), errCurrB = new Float32Array(w2);
-          const errNextR = new Float32Array(w2), errNextG = new Float32Array(w2), errNextB = new Float32Array(w2);
-          for (let y = 0; y < targetH; y++) {
-            const leftToRight = (y % 2 === 0);
-            for (let i = 0; i < w2; i++) { errCurrR[i] += 0; errCurrG[i] += 0; errCurrB[i] += 0; }
-            if (leftToRight) {
-              for (let x = 0; x < targetW; x++) {
-                const idx = (y * targetW + x) * 4;
-                if (data[idx + 3] === 0) continue;
-                let r = data[idx] + errCurrR[x+1];
-                let g = data[idx+1] + errCurrG[x+1];
-                let b = data[idx+2] + errCurrB[x+1];
-                r = r < 0 ? 0 : (r > 255 ? 255 : r);
-                g = g < 0 ? 0 : (g > 255 ? 255 : g);
-                b = b < 0 ? 0 : (b > 255 ? 255 : b);
-                const nn = nearestPaletteColor(r, g, b, metric);
-                data[idx] = nn[0]; data[idx+1] = nn[1]; data[idx+2] = nn[2];
-                const er = r - nn[0];
-                const eg = g - nn[1];
-                const eb = b - nn[2];
-                errCurrR[x+2] += er * (7/16); errCurrG[x+2] += eg * (7/16); errCurrB[x+2] += eb * (7/16);
-                errNextR[x  ] += er * (3/16); errNextG[x  ] += eg * (3/16); errNextB[x  ] += eb * (3/16);
-                errNextR[x+1] += er * (5/16); errNextG[x+1] += eg * (5/16); errNextB[x+1] += eb * (5/16);
-                errNextR[x+2] += er * (1/16); errNextG[x+2] += eg * (1/16); errNextB[x+2] += eb * (1/16);
-              }
-            } else {
-              for (let x = targetW - 1; x >= 0; x--) {
-                const idx = (y * targetW + x) * 4;
-                if (data[idx + 3] === 0) continue;
-                let r = data[idx] + errCurrR[x+1];
-                let g = data[idx+1] + errCurrG[x+1];
-                let b = data[idx+2] + errCurrB[x+1];
-                r = r < 0 ? 0 : (r > 255 ? 255 : r);
-                g = g < 0 ? 0 : (g > 255 ? 255 : g);
-                b = b < 0 ? 0 : (b > 255 ? 255 : b);
-                const nn = nearestPaletteColor(r, g, b, metric);
-                data[idx] = nn[0]; data[idx+1] = nn[1]; data[idx+2] = nn[2];
-                const er = r - nn[0];
-                const eg = g - nn[1];
-                const eb = b - nn[2];
-                errCurrR[x  ] += er * (7/16); errCurrG[x  ] += eg * (7/16); errCurrB[x  ] += eb * (7/16);
-                errNextR[x+2] += er * (3/16); errNextG[x+2] += eg * (3/16); errNextB[x+2] += eb * (3/16);
-                errNextR[x+1] += er * (5/16); errNextG[x+1] += eg * (5/16); errNextB[x+1] += eb * (5/16);
-                errNextR[x  ] += er * (1/16); errNextG[x  ] += eg * (1/16); errNextB[x  ] += eb * (1/16);
-              }
-            }
-            for (let i = 0; i < w2; i++) { errCurrR[i] = errNextR[i]; errCurrG[i] = errNextG[i]; errCurrB[i] = errNextB[i]; errNextR[i]=0; errNextG[i]=0; errNextB[i]=0; }
-          }
+        // If it's a template, skip all image processing (alpha, dithering, palette quantization)
+        if (imgPreviewApply._isTemplate) {
+          // No image processing needed for templates
         } else {
-          for (let y = 0; y < targetH; y++) {
-            for (let x = 0; x < targetW; x++) {
-              const idx = (y * targetW + x) * 4;
-              if (data[idx + 3] === 0) continue;
-              const nn = nearestPaletteColor(data[idx], data[idx+1], data[idx+2], metric);
-              data[idx] = nn[0]; data[idx+1] = nn[1]; data[idx+2] = nn[2];
+          // Existing image processing logic for non-template images
+          const id = octx.getImageData(0, 0, targetW, targetH);
+          const data = id.data;
+          const alphaTh = imgAlphaInput ? parseInt(imgAlphaInput.value||'0',10) : 0;
+          for (let i = 0; i < data.length; i += 4) {
+            data[i+3] = (data[i+3] <= alphaTh) ? 0 : 255;
+          }
+          const metric = imgColorMetricSelect ? imgColorMetricSelect.value : 'oklab';
+          if (imgDitherEnabled) {
+            const w2 = targetW + 2;
+            const errCurrR = new Float32Array(w2), errCurrG = new Float32Array(w2), errCurrB = new Float32Array(w2);
+            const errNextR = new Float32Array(w2), errNextG = new Float32Array(w2), errNextB = new Float32Array(w2);
+            for (let y = 0; y < targetH; y++) {
+              const leftToRight = (y % 2 === 0);
+              for (let i = 0; i < w2; i++) { errCurrR[i] += 0; errCurrG[i] += 0; errCurrB[i] += 0; }
+              if (leftToRight) {
+                for (let x = 0; x < targetW; x++) {
+                  const idx = (y * targetW + x) * 4;
+                  if (data[idx + 3] === 0) continue;
+                  let r = data[idx] + errCurrR[x+1];
+                  let g = data[idx+1] + errCurrG[x+1];
+                  let b = data[idx+2] + errCurrB[x+1];
+                  r = r < 0 ? 0 : (r > 255 ? 255 : r);
+                  g = g < 0 ? 0 : (g > 255 ? 255 : g);
+                  b = b < 0 ? 0 : (b > 255 ? 255 : b);
+                  const nn = nearestPaletteColor(r, g, b, metric);
+                  data[idx] = nn[0]; data[idx+1] = nn[1]; data[idx+2] = nn[2];
+                  const er = r - nn[0];
+                  const eg = g - nn[1];
+                  const eb = b - nn[2];
+                  errCurrR[x+2] += er * (7/16); errCurrG[x+2] += eg * (7/16); errCurrB[x+2] += eb * (7/16);
+                  errNextR[x  ] += er * (3/16); errNextG[x  ] += eg * (3/16); errNextB[x  ] += eb * (3/16);
+                  errNextR[x+1] += er * (5/16); errNextG[x+1] += eg * (5/16); errNextB[x+1] += eb * (5/16);
+                  errNextR[x+2] += er * (1/16); errNextG[x+2] += eg * (1/16); errNextB[x+2] += eb * (1/16);
+                }
+              } else {
+                for (let x = targetW - 1; x >= 0; x--) {
+                  const idx = (y * targetW + x) * 4;
+                  if (data[idx + 3] === 0) continue;
+                  let r = data[idx] + errCurrR[x+1];
+                  let g = data[idx+1] + errCurrG[x+1];
+                  let b = data[idx+2] + errCurrB[x+1];
+                  r = r < 0 ? 0 : (r > 255 ? 255 : r);
+                  g = g < 0 ? 0 : (g > 255 ? 255 : g);
+                  b = b < 0 ? 0 : (b > 255 ? 255 : b);
+                  const nn = nearestPaletteColor(r, g, b, metric);
+                  data[idx] = nn[0]; data[idx+1] = nn[1]; data[idx+2] = nn[2];
+                  const er = r - nn[0];
+                  const eg = g - nn[1];
+                  const eb = b - nn[2];
+                  errCurrR[x  ] += er * (7/16); errCurrG[x  ] += eg * (7/16); errCurrB[x  ] += eb * (7/16);
+                  errNextR[x+2] += er * (3/16); errNextG[x+2] += eg * (3/16); errNextB[x+2] += eb * (3/16);
+                  errNextR[x+1] += er * (5/16); errNextG[x+1] += eg * (5/16); errNextB[x+1] += eb * (5/16);
+                  errNextR[x  ] += er * (1/16); errNextG[x  ] += eg * (1/16); errNextB[x  ] += eb * (1/16);
+                }
+              }
+              for (let i = 0; i < w2; i++) { errCurrR[i] = errNextR[i]; errCurrG[i] = errNextG[i]; errCurrB[i] = errNextB[i]; errNextR[i]=0; errNextG[i]=0; errNextB[i]=0; }
+            }
+          } else {
+            for (let y = 0; y < targetH; y++) {
+              for (let x = 0; x < targetW; x++) {
+                const idx = (y * targetH + x) * 4;
+                if (data[idx + 3] === 0) continue;
+                const nn = nearestPaletteColor(data[idx], data[idx+1], data[idx+2], metric);
+                data[idx] = nn[0]; data[idx+1] = nn[1]; data[idx+2] = nn[2];
+              }
             }
           }
+          octx.putImageData(id, 0, 0);
         }
-        octx.putImageData(id, 0, 0);
       } catch {}
       // Compose optional background fill for display
       let disp = off;
@@ -6165,31 +6745,46 @@ function loadImage(area, no, preserveView = false) {
         const tmpImg = new Image();
         tmpImg.onload = async () => {
           URL.revokeObjectURL(url0);
-          const qBlob = await quantizeImageToPalette(tmpImg);
+          let finalBlob = blob;
+          // Apply quantization only if not a template
+          if (!imgPreviewApply._isTemplate) { // Use the _isTemplate property set in openImagePreview
+            finalBlob = await quantizeImageToPalette(tmpImg);
+          }
           // Persist quantized image as data URL for future sessions
           try {
             const reader = new FileReader();
             reader.onloadend = () => {
               try { localStorage.setItem('last.image.dataUrl', String(reader.result || '')); } catch {}
             };
-            reader.readAsDataURL(qBlob);
+            reader.readAsDataURL(finalBlob);
           } catch {}
-          const url = URL.createObjectURL(qBlob);
+
+          const url = URL.createObjectURL(finalBlob);
           const imageEl = new Image();
           imageEl.onload = () => {
             const pixelCount = countNonTransparentPixels(imageEl);
             const item = { url, name: imgPreviewApply._filename || 'image.png', image: imageEl, originalImage: imageEl, worldX: 0, worldY: 0, el: null, locked: false, pixelCount };
-            const centerPx = getContentCenterPx();
-            const centerWorldX = (centerPx.x - state.translateX) / state.scale;
-            const centerWorldY = (centerPx.y - state.translateY) / state.scale;
-            item.worldX = centerWorldX - imageEl.naturalWidth / 2;
-            item.worldY = centerWorldY - imageEl.naturalHeight / 2;
-            if (img) {
-              const maxX = Math.max(0, img.width - imageEl.naturalWidth);
-              const maxY = Math.max(0, img.height - imageEl.naturalHeight);
-              item.worldX = Math.min(Math.max(0, item.worldX), maxX);
-              item.worldY = Math.min(Math.max(0, item.worldY), maxY);
+            
+            if (imgPreviewApply._isTemplate) {
+              // For templates, use the X, Y coordinates from the inputs
+              item.worldX = parseInt(imgTemplateXInput.value || '0', 10);
+              item.worldY = parseInt(imgTemplateYInput.value || '0', 10);
+            } else {
+              // For non-templates, place at the center of the viewport, clamped by image bounds
+              const centerPx = getContentCenterPx();
+              const centerWorldX = (centerPx.x - state.translateX) / state.scale;
+              const centerWorldY = (centerPx.y - state.translateY) / state.scale;
+              item.worldX = centerWorldX - imageEl.naturalWidth / 2;
+              item.worldY = centerWorldY - imageEl.naturalHeight / 2;
+              
+              if (img) { // Clamp to existing image bounds if a base image is present
+                const maxX = Math.max(0, img.width - imageEl.naturalWidth);
+                const maxY = Math.max(0, img.height - imageEl.naturalHeight);
+                item.worldX = Math.min(Math.max(0, item.worldX), maxX);
+                item.worldY = Math.min(Math.max(0, item.worldY), maxY);
+              }
             }
+
             signItems.push(item);
             selectedIndex = signItems.length - 1;
             addThumbForItem(item, signItems.length - 1);
@@ -6216,10 +6811,37 @@ function loadImage(area, no, preserveView = false) {
       const tmpImg = new Image();
       tmpImg.onload = () => {
         URL.revokeObjectURL(tmpUrl);
-        openImagePreview(tmpImg, file.name);
+        openImagePreview(tmpImg, file.name, false);
       };
       tmpImg.src = tmpUrl;
     });
+
+    const templateFileInput = document.getElementById('template-file');
+    const uploadTemplateBtn = document.getElementById('btn-upload-template');
+
+    if (uploadTemplateBtn) {
+        uploadTemplateBtn.addEventListener('click', () => {
+            try { templateFileInput.value = ''; } catch {}
+            templateFileInput.click();
+        });
+    }
+
+    if (templateFileInput) {
+        templateFileInput.addEventListener('change', () => {
+            const files = Array.from(templateFileInput.files || []);
+            if (!files.length) return;
+            const file = files[0];
+            const tmpUrl = URL.createObjectURL(file);
+            const tmpImg = new Image();
+            tmpImg.onload = () => {
+                URL.revokeObjectURL(tmpUrl);
+                // Mark this image as a template to bypass processing
+                tmpImg._isTemplate = true;
+                openImagePreview(tmpImg, file.name, true);
+            };
+            tmpImg.src = tmpUrl;
+        });
+    }
 
     
     
@@ -6239,6 +6861,270 @@ function loadImage(area, no, preserveView = false) {
     const readyAccountBtn = document.getElementById('btn-ready-account');
     const readyAccountList = document.getElementById('ready-account-list');
     const readyTokenInput = document.getElementById('ready-token-input');
+    
+    // --- Range Overlay V2 ---
+    const rangeOverlay = document.getElementById('range-overlay');
+    const btnAddOverlay = document.getElementById('btn-add-overlay');
+    const overlayListEl = document.getElementById('overlay-list');
+    const dimOverlay = document.getElementById('dim-overlay'); /* Lấy phần tử dim-overlay */
+    const dimCtx = dimOverlay ? dimOverlay.getContext('2d') : null; /* Lấy context của dim-overlay */
+
+    let isDrawingOverlay = false;
+    let overlayStartX = 0, overlayStartY = 0;
+    let savedOverlays = [];
+    let selectedOverlayIndex = -1;
+
+    function renderOverlayList() {
+        if (!overlayListEl) return;
+        overlayListEl.innerHTML = '';
+        savedOverlays.forEach((overlay, index) => {
+            const item = document.createElement('div');
+            item.className = 'overlay-item';
+            // Add a class to indicate if it's the currently selected overlay for drawing/editing
+            item.classList.toggle('selected', index === selectedOverlayIndex);
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = overlay.name || `Overlay ${index + 1}`;
+            item.appendChild(nameSpan);
+
+            const coordsSpan = document.createElement('span');
+            coordsSpan.style.fontSize = '10px';
+            coordsSpan.style.opacity = '0.7';
+            coordsSpan.textContent = `(${overlay.rect.x}, ${overlay.rect.y}) - ${overlay.rect.w}x${overlay.rect.h}`;
+            item.appendChild(coordsSpan);
+
+            const actions = document.createElement('div');
+            actions.className = 'overlay-item-actions';
+            
+            const toggleInput = document.createElement('input');
+            toggleInput.type = 'checkbox';
+            toggleInput.checked = overlay.isVisible !== false; // Default to true if not set
+            toggleInput.title = 'Toggle visibility';
+            toggleInput.onchange = (e) => {
+                overlay.isVisible = e.target.checked;
+                saveOverlaysToStorage();
+                updateRangeOverlayPosition(); // Update display immediately
+            };
+            actions.appendChild(toggleInput);
+
+            const selectBtn = document.createElement('button');
+            selectBtn.textContent = t('buttons.selectOverlay');
+            selectBtn.title = 'Select for drawing/editing';
+            selectBtn.onclick = (e) => {
+                e.stopPropagation();
+                // Toggle selection: if already selected, deselect; otherwise, select this one
+                selectedOverlayIndex = (selectedOverlayIndex === index) ? -1 : index;
+                saveOverlaysToStorage(); // Save selection state
+                renderOverlayList(); // Re-render to update selected class
+                updateRangeOverlayPosition(); // Update range overlay display
+            };
+            actions.appendChild(selectBtn);
+
+            const saveBtn = document.createElement('button');
+            saveBtn.textContent = overlay.isSaved ? t('buttons.unsave') : t('buttons.save');
+            saveBtn.title = overlay.isSaved ? 'Unsave overlay' : 'Save overlay';
+            saveBtn.onclick = (e) => {
+                e.stopPropagation();
+                overlay.isSaved = !overlay.isSaved;
+                saveOverlaysToStorage();
+                renderOverlayList(); // Re-render to update button text
+                updateRangeOverlayPosition(); // Update style
+            };
+            actions.appendChild(saveBtn);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = t('buttons.delete');
+            deleteBtn.title = 'Delete overlay';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                savedOverlays.splice(index, 1);
+                // Adjust selectedOverlayIndex if the deleted item was selected or before the selected one
+                if (selectedOverlayIndex === index) {
+                    selectedOverlayIndex = -1;
+                } else if (selectedOverlayIndex > index) {
+                    selectedOverlayIndex--;
+                }
+                saveOverlaysToStorage();
+                renderOverlayList();
+                updateRangeOverlayPosition();
+            };
+            actions.appendChild(deleteBtn);
+            item.appendChild(actions);
+            overlayListEl.appendChild(item);
+        });
+    }
+
+    function updateRangeOverlayPosition() {
+        if (!rangeOverlay || !img) return;
+        // Clear previous overlays
+        rangeOverlay.hidden = true; // Hide the main overlay element
+
+        // Render all visible overlays from savedOverlays
+        // This requires dynamically creating/managing multiple overlay elements or drawing on a canvas.
+        // For simplicity, let's assume we'll manage a single visible overlay at selectedOverlayIndex
+        // and if multiple are needed, we'd draw them onto a dedicated canvas.
+        // For now, only the selected one will be drawn by this function.
+        if (selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible !== false) {
+            const rect = savedOverlays[selectedOverlayIndex].rect;
+            const p = worldToScreen(rect.x, rect.y);
+            const sizeW = rect.w * state.scale;
+            const sizeH = rect.h * state.scale;
+            rangeOverlay.style.left = p.x + 'px';
+            rangeOverlay.style.top = p.y + 'px';
+            rangeOverlay.style.width = sizeW + 'px';
+            rangeOverlay.style.height = sizeH + 'px';
+            rangeOverlay.hidden = false;
+            rangeOverlay.classList.toggle('saved-overlay', savedOverlays[selectedOverlayIndex].isSaved);
+        }
+        updateDimOverlay(); // Always update dim overlay
+    }
+
+    function updateDimOverlay() {
+        if (!dimOverlay || !dimCtx) return;
+        
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+        dimOverlay.width = Math.floor(viewportWidth * dpr);
+        dimOverlay.height = Math.floor(viewportHeight * dpr);
+        dimOverlay.style.width = viewportWidth + 'px';
+        dimOverlay.style.height = viewportHeight + 'px';
+        
+        let anyOverlayVisible = false;
+        // Check if any of the "saved overlays" are visible
+        savedOverlays.forEach(overlay => {
+            if (overlay.isVisible !== false) {
+                anyOverlayVisible = true;
+            }
+        });
+
+        // Also check if any of the main modals are visible
+        const isAccountsModalVisible = !accountsModal.hidden;
+        const isImgPreviewModalVisible = !imgPreviewModal.hidden;
+        const isFavoritesModalVisible = !favoritesModal.hidden;
+        const isSaveFavModalVisible = !saveFavModal.hidden;
+        const isReadyPopupVisible = !readyPopup.hidden;
+
+        const anyModalOrOverlayVisible = anyOverlayVisible || isAccountsModalVisible || isImgPreviewModalVisible || isFavoritesModalVisible || isSaveFavModalVisible || isReadyPopupVisible;
+
+        if (anyModalOrOverlayVisible) {
+            document.body.classList.add('no-scroll');
+            dimOverlay.hidden = false;
+            dimCtx.clearRect(0, 0, dimOverlay.width, dimOverlay.height);
+            dimCtx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // Màu làm mờ
+            dimCtx.fillRect(0, 0, dimOverlay.width, dimOverlay.height);
+
+            // Clear areas for all visible overlays drawn on the dim overlay
+            savedOverlays.forEach(overlay => {
+                if (overlay.isVisible !== false) {
+                    const rect = overlay.rect;
+                    const p = worldToScreen(rect.x, rect.y);
+                    const sizeW = rect.w * state.scale;
+                    const sizeH = rect.h * state.scale;
+
+                    const clearX = Math.floor(p.x * dpr);
+                    const clearY = Math.floor(p.y * dpr);
+                    const clearW = Math.floor(sizeW * dpr);
+                    const clearH = Math.floor(sizeH * dpr);
+
+                    dimCtx.clearRect(clearX, clearY, clearW, clearH);
+                }
+            });
+        } else {
+            document.body.classList.remove('no-scroll');
+            dimOverlay.hidden = true;
+            dimCtx.clearRect(0, 0, dimOverlay.width, dimOverlay.height);
+        }
+    }
+    
+    function captureOverlayImageData(overlay) {
+        if (!overlay || !img || !canvas || !ctx) return;
+
+        const rect = overlay.rect;
+        const tempCanvas = document.createElement('canvas');
+        // Set temporary canvas dimensions to match the overlay's world dimensions
+        tempCanvas.width = rect.w;
+        tempCanvas.height = rect.h;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // Draw the relevant portion of the main canvas onto the temporary canvas
+        // This captures the current state of the map/tiles in that region
+        // The source coordinates for drawImage should be relative to the main canvas's world coordinates
+        // which means the overlay's worldX and worldY.
+        tempCtx.drawImage(
+            canvas,
+            rect.x, // Source X (world coordinate of overlay)
+            rect.y, // Source Y (world coordinate of overlay)
+            rect.w, // Source Width
+            rect.h, // Source Height
+            0, 0, // Destination X, Y (on the temp canvas)
+            rect.w, // Destination Width
+            rect.h // Destination Height
+        );
+
+        // Store the image data as a data URL
+        overlay.imageData = tempCanvas.toDataURL();
+    }
+
+    function saveOverlaysToStorage() {
+      try {
+        const serializableOverlays = savedOverlays.map(ov => {
+            // We need to store imageData if it exists, as it's the visual representation
+            // The previous diff was incorrect in excluding it.
+            // If imageData is too large for localStorage, we might need a different strategy (e.g., IndexedDB)
+            // For now, let's include it and see. If it causes issues, we'll revisit.
+            return {
+                id: ov.id,
+                name: ov.name,
+                rect: ov.rect,
+                isVisible: ov.isVisible,
+                isSaved: ov.isSaved,
+                imageData: ov.imageData // Include imageData
+            };
+        });
+        localStorage.setItem('savedOverlays', JSON.stringify(serializableOverlays));
+        localStorage.setItem('selectedOverlayIndex', selectedOverlayIndex);
+      } catch {}
+    }
+
+    function loadOverlaysFromStorage() {
+      try {
+        const saved = localStorage.getItem('savedOverlays');
+        const savedIndex = localStorage.getItem('selectedOverlayIndex');
+        if (saved) {
+          const loadedOverlays = JSON.parse(saved);
+          savedOverlays = loadedOverlays.map(ov => {
+              // Ensure isSaved property exists for old saved overlays
+              if (typeof ov.isSaved === 'undefined') {
+                  ov.isSaved = false;
+              }
+              // Re-create Image object from imageData URL if available
+              if (ov.imageData) {
+                  const imgEl = new Image();
+                  imgEl.src = ov.imageData;
+                  ov._imageEl = imgEl; // Store the Image object
+              }
+              return ov;
+          });
+        }
+        if (savedIndex != null) {
+          selectedOverlayIndex = parseInt(savedIndex, 10);
+        }
+        renderOverlayList();
+        updateRangeOverlayPosition();
+      } catch {}
+    }
+
+    if (btnAddOverlay) {
+        btnAddOverlay.addEventListener('click', () => {
+            isDrawingOverlay = true;
+            canvas.style.cursor = 'crosshair';
+            if(readyPopup) readyPopup.hidden = true; // Hide popup to draw
+        });
+    }
+
+
     // Listen for token events from local server (extension posts here)
     (function initTokenSse(){
       try {
@@ -6273,6 +7159,10 @@ function loadImage(area, no, preserveView = false) {
     const autoModeTrack = document.getElementById('auto-mode-toggle');
     const autoModeLabelLeft = document.getElementById('auto-mode-label-left');
     const autoModeLabelRight = document.getElementById('auto-mode-label-right');
+    // Removed duplicate declaration from here, as they are handled in the previous diff block
+    // If they were truly meant to be separate variables, this change would be problematic.
+    // Given the "Cannot access ... before initialization" error, this indicates
+    // an issue with how they were being used without proper declaration.
     const autoStartTrack = document.getElementById('auto-start-toggle');
     const autoStartLabelLeft = document.getElementById('auto-start-label-left');
     const autoStartLabelRight = document.getElementById('auto-start-label-right');
@@ -6305,6 +7195,26 @@ function loadImage(area, no, preserveView = false) {
       try { if (autoStartLabelLeft) autoStartLabelLeft.classList.toggle('active', !autoStart); } catch {}
       try { if (autoStartLabelRight) autoStartLabelRight.classList.toggle('active', !!autoStart); } catch {}
     }
+
+    function updateBrokenPixelPaintUi(){
+      try { if (brokenPixelPaintToggle) brokenPixelPaintToggle.classList.toggle('on', !!brokenPixelPaintEnabled); } catch {}
+      try { if (brokenPixelPaintToggle) brokenPixelPaintToggle.setAttribute('aria-checked', brokenPixelPaintEnabled ? 'true' : 'false'); } catch {}
+    }
+
+    function updatePriorityColorPaintUi(){
+      try { if (priorityColorPaintToggle) priorityColorPaintToggle.classList.toggle('on', !!priorityColorPaintEnabled); } catch {}
+      try { if (priorityColorPaintToggle) priorityColorPaintToggle.setAttribute('aria-checked', priorityColorPaintEnabled ? 'true' : 'false'); } catch {}
+    }
+
+    function updateChessPaintUi(){
+      try { if (chessPaintToggle) chessPaintToggle.classList.toggle('on', !!chessPaintEnabled); } catch {}
+      try { if (chessPaintToggle) chessPaintToggle.setAttribute('aria-checked', chessPaintEnabled ? 'true' : 'false'); } catch {}
+    }
+
+    function updateLimitOverlayUi(){
+      try { if (limitOverlayToggle) limitOverlayToggle.classList.toggle('on', !!limitToOverlayArea); } catch {}
+      try { if (limitOverlayToggle) limitOverlayToggle.setAttribute('aria-checked', limitToOverlayArea ? 'true' : 'false'); } catch {}
+    }
     try {
       const savedAuto = localStorage.getItem('ready.autoMode');
       autoMode = (savedAuto === '1' || savedAuto === 'true');
@@ -6313,6 +7223,69 @@ function loadImage(area, no, preserveView = false) {
       autoStart = (savedAutoStart === '1' || savedAutoStart === 'true');
       updateAutoStartUi();
     } catch {}
+
+    try {
+      brokenPixelPaintEnabled = (localStorage.getItem('brokenPixelPaint.enabled') === '1' || localStorage.getItem('brokenPixelPaint.enabled') === 'true');
+      updateBrokenPixelPaintUi();
+
+      priorityColorPaintEnabled = (localStorage.getItem('priorityColorPaint.enabled') === '1' || localStorage.getItem('priorityColorPaint.enabled') === 'true');
+      updatePriorityColorPaintUi();
+
+      const savedChessPaint = localStorage.getItem('chessPaint.enabled');
+      chessPaintEnabled = (savedChessPaint === '1' || savedChessPaint === 'true');
+      updateChessPaintUi();
+
+      const savedLimitOverlay = localStorage.getItem('limitOverlay.enabled');
+      limitToOverlayArea = (savedLimitOverlay === '1' || savedLimitOverlay === 'true');
+      updateLimitOverlayUi();
+      
+      const savedMinizine = localStorage.getItem('minizineToDetect.threshold');
+      if (savedMinizine != null && !isNaN(Number(savedMinizine))) {
+        minizineToDetectThreshold = Math.max(1, Math.min(100, Number(savedMinizine)));
+        if (minizineToDetectInput) minizineToDetectInput.value = String(minizineToDetectThreshold);
+      }
+    } catch {}
+
+    if (brokenPixelPaintToggle) brokenPixelPaintToggle.addEventListener('click', () => {
+      brokenPixelPaintEnabled = !brokenPixelPaintEnabled;
+      try { localStorage.setItem('brokenPixelPaint.enabled', brokenPixelPaintEnabled ? '1' : '0'); } catch {}
+      updateBrokenPixelPaintUi();
+    });
+
+    if (priorityColorPaintToggle) priorityColorPaintToggle.addEventListener('click', () => {
+      priorityColorPaintEnabled = !priorityColorPaintEnabled;
+      try { localStorage.setItem('priorityColorPaint.enabled', priorityColorPaintEnabled ? '1' : '0'); } catch {}
+      updatePriorityColorPaintUi();
+    });
+
+    if (chessPaintToggle) chessPaintToggle.addEventListener('click', () => {
+      chessPaintEnabled = !chessPaintEnabled;
+      try { localStorage.setItem('chessPaint.enabled', chessPaintEnabled ? '1' : '0'); } catch {}
+      updateChessPaintUi();
+    });
+
+    if (limitOverlayToggle) limitOverlayToggle.addEventListener('click', () => {
+      limitToOverlayArea = !limitToOverlayArea;
+      try { localStorage.setItem('limitOverlay.enabled', limitToOverlayArea ? '1' : '0'); } catch {}
+      updateLimitOverlayUi();
+      // Render to show/hide range-overlay if it's selected
+      render();
+      updateRangeOverlayPosition();
+    });
+
+
+    if (minizineToDetectInput) {
+      minizineToDetectInput.addEventListener('change', () => {
+        let value = parseInt(minizineToDetectInput.value, 10);
+        if (isNaN(value) || value < 1) value = 1;
+        if (value > 100) value = 100;
+        minizineToDetectThreshold = value;
+        minizineToDetectInput.value = String(minizineToDetectThreshold);
+        try { localStorage.setItem('minizineToDetect.threshold', String(minizineToDetectThreshold)); } catch {}
+      });
+    }
+
+
     if (autoModeTrack) autoModeTrack.addEventListener('click', () => {
       autoMode = !autoMode;
       try { localStorage.setItem('ready.autoMode', autoMode ? '1' : '0'); } catch {}
@@ -6655,6 +7628,32 @@ function loadImage(area, no, preserveView = false) {
         const totalCells = w * h;
         let traversed = 0;
         while (addedCount < need && traversed < totalCells) {
+          // Apply Chess Pattern Paint logic
+          if (chessPaintEnabled && ((sx + sy) % 2 !== 0)) { // Skip if not on a "black" square
+              // Move to the next pixel in the current scanline without adding
+              sx += 1;
+              if (sx >= w) { sx = 0; sy += 1; }
+              if (sy >= h) { sy = 0; }
+              traversed++;
+              continue; // Skip to the next iteration
+          }
+
+          // Apply Limit to Overlay Area logic
+          if (limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible) {
+              const overlayRect = savedOverlays[selectedOverlayIndex].rect;
+              const wx = Math.round((selItem.worldX || 0) + sx);
+              const wy = Math.round((selItem.worldY || 0) + sy);
+              if (wx < overlayRect.x || wx >= (overlayRect.x + overlayRect.w) ||
+                  wy < overlayRect.y || wy >= (overlayRect.y + overlayRect.h)) {
+                  // Move to the next pixel if outside the overlay area
+                  sx += 1;
+                  if (sx >= w) { sx = 0; sy += 1; }
+                  if (sy >= h) { sy = 0; }
+                  traversed++;
+                  continue; // Skip to the next iteration
+              }
+          }
+
           if (isOpaquePixel(selItem, sx, sy) && (selectedOverrideColorId != null || !isSamePaletteIdAsBase(selItem, sx, sy))) {
             const pid = (selectedOverrideColorId != null && selectedOverrideColorId !== 0)
               ? selectedOverrideColorId
@@ -6689,11 +7688,22 @@ function loadImage(area, no, preserveView = false) {
       const w = selItem.image.naturalWidth|0;
       const h = selItem.image.naturalHeight|0;
       if (!(w && h)) return 0;
+
+      let minX = 0, minY = 0, maxX = w, maxY = h;
+      if (limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible) {
+          const overlayRect = savedOverlays[selectedOverlayIndex].rect;
+          // Convert overlay world coordinates to item-local coordinates
+          minX = Math.max(0, overlayRect.x - (selItem.worldX || 0));
+          minY = Math.max(0, overlayRect.y - (selItem.worldY || 0));
+          maxX = Math.min(w, overlayRect.x + overlayRect.w - (selItem.worldX || 0));
+          maxY = Math.min(h, overlayRect.y + overlayRect.h - (selItem.worldY || 0));
+      }
+
       const size = w * h;
       const idxOf = (x, y) => y * w + x;
       const mask = new Uint8Array(size);
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
+      for (let y = minY; y < maxY; y++) {
+        for (let x = minX; x < maxX; x++) {
           if (isOpaquePixel(selItem, x, y)) {
             mask[idxOf(x,y)] = 1;
           }
@@ -6709,11 +7719,11 @@ function loadImage(area, no, preserveView = false) {
         layer[i] = l;
         qx[qt] = x; qy[qt] = y; qt++;
       }
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
+      for (let y = minY; y < maxY; y++) {
+        for (let x = minX; x < maxX; x++) {
           const i = idxOf(x,y);
           if (!mask[i]) continue;
-          if (x === 0 || x === w-1 || y === 0 || y === h-1 ||
+          if (x === minX || x === maxX-1 || y === minY || y === maxY-1 ||
               !mask[idxOf(x-1,y)] || !mask[idxOf(x+1,y)] ||
               !mask[idxOf(x,y-1)] || !mask[idxOf(x,y+1)]) {
             push(x, y, 0);
@@ -6726,19 +7736,19 @@ function loadImage(area, no, preserveView = false) {
         const l = layer[idxOf(x,y)];
         qh++;
         const nl = l + 1;
-        if (x > 0) {
+        if (x > minX) {
           const i = idxOf(x-1,y);
           if (mask[i] && layer[i] === -1) push(x-1, y, nl);
         }
-        if (x < w-1) {
+        if (x < maxX-1) {
           const i = idxOf(x+1,y);
           if (mask[i] && layer[i] === -1) push(x+1, y, nl);
         }
-        if (y > 0) {
+        if (y > minY) {
           const i = idxOf(x,y-1);
           if (mask[i] && layer[i] === -1) push(x, y-1, nl);
         }
-        if (y < h-1) {
+        if (y < maxY-1) {
           const i = idxOf(x,y+1);
           if (mask[i] && layer[i] === -1) push(x, y+1, nl);
         }
@@ -6760,6 +7770,14 @@ function loadImage(area, no, preserveView = false) {
       let added = 0;
       for (let i = 0; i < order.length && added < need; i++) {
         const p = order[i];
+        // Only consider pixels within the selected overlay's bounds
+        if (p.x < minX || p.x >= maxX || p.y < minY || p.y >= maxY) continue;
+
+        // Apply Chess Pattern Paint logic
+        if (chessPaintEnabled && ((p.x + p.y) % 2 !== 0)) { // Skip if not on a "black" square
+            continue;
+        }
+
         if (map && map.has(keyFor(p.x, p.y))) continue;
         if (selectedOverrideColorId == null && isSamePaletteIdAsBase(selItem, p.x, p.y)) continue;
         if (selectedOverrideColorId != null && selectedOverrideColorId !== 0 && isPremiumColorId(selectedOverrideColorId)) {
@@ -6806,6 +7824,21 @@ function loadImage(area, no, preserveView = false) {
         const hasAnyPixel = readyGlobalMode ? (readyGlobalSelected.size > 0) : (getReadySelectedCount() > 0);
         startBtn.disabled = !(hasToken && hasAccounts && hasAnyPixel);
       } catch {}
+    }
+    function updateEraserButtonUi() {
+        if (eraserButton) {
+            eraserButton.classList.toggle('active', isEraserMode);
+        }
+        // Đảm bảo nút transparent trong palette cũng được highlight khi ở chế độ tẩy
+        const transparentSwatch = colorPaletteEl.querySelector('.palette-swatch.transparent');
+        if (transparentSwatch) {
+            transparentSwatch.classList.toggle('selected', isEraserMode);
+        }
+        // Đảm bảo không có màu nào khác được chọn khi ở chế độ tẩy
+        if (isEraserMode) {
+             const swatches = Array.from(colorPaletteEl.querySelectorAll('.palette-swatch:not(.transparent)'));
+             swatches.forEach(sw => sw.classList.remove('selected'));
+        }
     }
 
     function groupPixelsByTile(colors, coords) {
@@ -7265,6 +8298,10 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
     });
 
  (async () => {
+  loadPriorityColors(); // Call load on startup
+  renderPriorityColors(); // Call render on startup
+  loadBrokenPixelColors(); // Call load on startup for broken pixels
+  renderBrokenPixelColors(); // Call render on startup for broken pixels
   try {
     // Restore last view position
     try {
@@ -7293,16 +8330,19 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
       loadImage(areaInput.value, noInput.value, true);
     } else if (areaInput.value && noInput.value) {
       loadImage(areaInput.value, noInput.value, true);
-    }    
+    }
   } catch {}
   updateCounter();
   loadAccounts();
+  updatePixelPowerPosition(); // Gọi hàm này sau khi loadAccounts hoàn tất
 })();
-    updatePixelPowerPosition();
 
     try {
       setInterval(() => { refreshAllAccounts(); }, 20 * 1000);
     } catch {}
+
+    // Load overlays from storage on startup
+    try { loadOverlaysFromStorage(); } catch {}
 
     const CANVAS_REFRESH_MS = 30 * 1000;
     setInterval(() => {
@@ -7355,39 +8395,141 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
     }
 
     function buildSelectedExportForItem(item){
-      const map = getSelectedMap(item);
-      const coords = [];
       const colors = [];
+      const coords = [];
+      const map = getSelectedMap(item);
+      
+      // Function to check if a pixel is a priority color
+      const isPriorityColor = (colorId) => priorityColors.includes(colorId);
+      // Function to check if a pixel is a broken pixel priority color
+      const isBrokenPixelPriorityColor = (colorId) => brokenPixelPriorityColors.includes(colorId);
+
+      // Helper to create pixel objects
+      const createPixelObj = (cId, x, y, isBroken = false) => ({
+          c: cId,
+          x: x,
+          y: y,
+          premium: (cId != null && cId !== 0 && isPremiumColorId(cId)),
+          isPriority: isPriorityColor(cId),
+          isBrokenPixelPriority: isBrokenPixelPriorityColor(cId),
+          isBroken: isBroken
+      });
+
+      let allPixels = [];
+
       if (readyGlobalMode) {
         readyGlobalSelected.forEach((rec) => {
-          coords.push(rec.wx, rec.wy);
-          colors.push(rec.colorId == null ? null : rec.colorId);
+          const wx = rec.wx;
+          const wy = rec.wy;
+          const targetColor = getPaletteRgbById(rec.colorId);
+          const currentColor = getColorAtWorld(wx, wy);
+
+          const broken = (targetColor && currentColor && areColorsSignificantlyDifferent(
+            {r: targetColor[0], g: targetColor[1], b: targetColor[2]},
+            currentColor,
+            COLOR_DIFFERENCE_THRESHOLD // Use global threshold for general broken pixel detection
+          ));
+          allPixels.push(createPixelObj(rec.colorId, wx, wy, broken));
         });
       } else if (map) {
         map.forEach((rec) => {
-          const wx = Math.round((item.worldX || 0) + rec.x);
-          const wy = Math.round((item.worldY || 0) + rec.y);
-          coords.push(wx, wy);
-          const pid = (rec && rec.colorId != null) ? rec.colorId : getItemPixelPaletteId(item, rec.x, rec.y);
-          colors.push(pid == null ? null : pid);
+          const lx = rec.x;
+          const ly = rec.y;
+          const wx = Math.round((item.worldX || 0) + lx);
+          const wy = Math.round((item.worldY || 0) + ly);
+          const pid = (rec && rec.colorId != null) ? rec.colorId : getItemPixelPaletteId(item, lx, ly);
+          const targetColor = getPaletteRgbById(pid);
+          const currentColor = getColorAtWorld(wx, wy);
+
+          const broken = (targetColor && currentColor && areColorsSignificantlyDifferent(
+            {r: targetColor[0], g: targetColor[1], b: targetColor[2]},
+            currentColor,
+            COLOR_DIFFERENCE_THRESHOLD // Use global threshold for general broken pixel detection
+          ));
+          allPixels.push(createPixelObj(pid, wx, wy, broken));
         });
       }
-      // Reorder: premium colors first, then free colors to satisfy "send premium first"
-      const pairs = [];
-      for (let i = 0; i < colors.length; i++) {
-        const c = colors[i];
-        const x = coords[i*2];
-        const y = coords[i*2 + 1];
-        pairs.push({ c, x, y, premium: (c != null && c !== 0 && isPremiumColorId(c)) });
+      
+      // Filter out duplicates (pixels that already match the map color) before sorting
+      const filteredPixels = [];
+      const pixelMap = new Map(); // Use a Map to store unique pixels and their data
+
+      allPixels.forEach(p => {
+          const key = `${p.x},${p.y}`;
+          if (!pixelMap.has(key)) {
+              const currentWorldColor = getCompositeColorAtWorld(p.x, p.y);
+              const selectedColor = getPaletteRgbById(p.c);
+
+              if (removeDuplicatesBtn && currentWorldColor && selectedColor &&
+                  currentWorldColor.r === selectedColor[0] &&
+                  currentWorldColor.g === selectedColor[1] &&
+                  currentWorldColor.b === selectedColor[2] &&
+                  currentWorldColor.a > 0) {
+                  // This pixel is already painted correctly, so skip it
+                  return;
+              }
+              filteredPixels.push(p);
+              pixelMap.set(key, p);
+          }
+      });
+
+      // Sort based on new rules: Broken Pixel Priority Colors > Broken > Priority > Premium > Normal
+      filteredPixels.sort((a, b) => {
+          // 1. Broken Pixel Priority Colors first if brokenPixelPaintEnabled
+          if (brokenPixelPaintEnabled) {
+              if (a.isBrokenPixelPriority && !b.isBrokenPixelPriority) return -1;
+              if (!a.isBrokenPixelPriority && b.isBrokenPixelPriority) return 1;
+              // If both are broken pixel priority colors, prioritize actual broken pixels
+              if (a.isBrokenPixelPriority && b.isBrokenPixelPriority) {
+                  if (a.isBroken && !b.isBroken) return -1;
+                  if (!a.isBroken && b.isBroken) return 1;
+              }
+          }
+
+          // 2. Broken pixels next if brokenPixelPaintEnabled (and not handled by brokenPixelPriority)
+          if (brokenPixelPaintEnabled) {
+              if (a.isBroken && !b.isBroken) return -1;
+              if (!a.isBroken && b.isBroken) return 1;
+          }
+
+          // 3. Priority colors next if priorityColorPaintEnabled
+          if (priorityColorPaintEnabled) {
+              if (a.isPriority && !b.isPriority) return -1;
+              if (!a.isPriority && b.isPriority) return 1;
+          }
+
+          // 4. Premium colors next
+          if (a.premium && !b.premium) return -1;
+          if (!a.premium && b.premium) return 1;
+
+          return 0; // Maintain original order for pixels with same priority
+      });
+
+      // Implement auto-selection logic for broken pixels if enabled
+      if (brokenPixelPaintEnabled) {
+          let brokenPixelsToPaint = [];
+          // Count broken pixels that match brokenPixelPriorityColors
+          for (const p of filteredPixels) {
+              if (p.isBroken && p.isBrokenPixelPriority) {
+                  brokenPixelsToPaint.push(p);
+              }
+          }
+          // If enough broken pixels matching priority colors are found, select them all
+          if (brokenPixelsToPaint.length >= minizineToDetectThreshold) {
+              for (const p of brokenPixelsToPaint) {
+                  colors.push(p.c);
+                  coords.push(p.x, p.y);
+              }
+              return { colors, coords }; // Only paint broken pixels
+          }
       }
-      pairs.sort((a, b) => (b.premium ? 1 : 0) - (a.premium ? 1 : 0));
-      const colorsOut = [];
-      const coordsOut = [];
-      for (let i = 0; i < pairs.length; i++) {
-        colorsOut.push(pairs[i].c);
-        coordsOut.push(pairs[i].x, pairs[i].y);
+
+      // If not painting only broken pixels, paint all filtered pixels
+      for (let i = 0; i < filteredPixels.length; i++) {
+        colors.push(filteredPixels[i].c);
+        coords.push(filteredPixels[i].x, filteredPixels[i].y);
       }
-      return { colors: colorsOut, coords: coordsOut };
+      return { colors, coords };
     }
 
     function logSelectedPixelsCurrentItem(){
@@ -7405,6 +8547,261 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
         updateStartEnabled();
       });
     }
+
+    if (removeDuplicatesBtn) {
+      removeDuplicatesBtn.addEventListener('click', () => {
+        const selItem = (selectedIndex >= 0 && selectedIndex < signItems.length) ? signItems[selectedIndex] : null;
+
+        if (readyGlobalMode) {
+          const keysToRemove = [];
+          readyGlobalSelected.forEach((rec, key) => {
+            const currentWorldColor = getCompositeColorAtWorld(rec.wx, rec.wy);
+            const selectedColor = getPaletteRgbById(rec.colorId);
+
+            // Loại bỏ nếu màu đã trùng khớp trên bản đồ hoặc trong suốt
+            if (currentWorldColor && selectedColor &&
+                currentWorldColor.r === selectedColor[0] &&
+                currentWorldColor.g === selectedColor[1] &&
+                currentWorldColor.b === selectedColor[2] &&
+                currentWorldColor.a > 0) {
+              keysToRemove.push(key);
+            }
+          });
+          keysToRemove.forEach(key => readyGlobalSelected.delete(key));
+        } else if (selItem) {
+          const map = getSelectedMap(selItem);
+          if (!map) return;
+
+          const keysToRemove = [];
+          map.forEach((rec, key) => {
+            const lx = rec.x;
+            const ly = rec.y;
+            const wx = Math.round((selItem.worldX || 0) + lx);
+            const wy = Math.round((selItem.worldY || 0) + ly);
+            const currentWorldColor = getCompositeColorAtWorld(wx, wy);
+            const selectedColor = getPaletteRgbById(rec.colorId);
+
+            // Loại bỏ nếu màu đã trùng khớp trên bản đồ hoặc trong suốt
+            if (currentWorldColor && selectedColor &&
+                currentWorldColor.r === selectedColor[0] &&
+                currentWorldColor.g === selectedColor[1] &&
+                currentWorldColor.b === selectedColor[2] &&
+                currentWorldColor.a > 0) {
+              keysToRemove.push(key);
+            }
+          });
+          keysToRemove.forEach(key => removePixelSelection(selItem, rec.x, rec.y));
+        }
+        updateReadySelectionLabel();
+        updatePixelMarkers();
+        render();
+        showToast(t('messages.duplicatesRemoved'), 'success', 2000);
+      });
+    }
+
+    if (addPriorityColorBtn) {
+      addPriorityColorBtn.addEventListener('click', () => {
+        // Just add currently selected color as priority if a color is selected
+        if (selectedOverrideColorId != null && selectedOverrideColorId !== 0) {
+          if (!priorityColors.includes(selectedOverrideColorId)) {
+            priorityColors.push(selectedOverrideColorId);
+            savePriorityColors();
+            renderPriorityColors();
+            showToast(t('messages.colorAddedToPriorityList'), 'success', 2000);
+          } else {
+            showToast(t('messages.colorAlreadyInPriorityList'), 'info', 2000);
+          }
+        } else {
+          showToast(t('messages.noColorSelected'), 'error', 2000);
+        }
+      });
+    }
+
+
+    function savePriorityColors() {
+      try {
+        localStorage.setItem(PRIORITY_COLORS_STORAGE_KEY, JSON.stringify(priorityColors));
+      } catch {}
+    }
+
+    function loadPriorityColors() {
+      try {
+        const saved = localStorage.getItem(PRIORITY_COLORS_STORAGE_KEY);
+        if (saved) {
+          priorityColors = JSON.parse(saved);
+        }
+      } catch {
+        priorityColors = [];
+      }
+    }
+
+    function renderPriorityColors() {
+      if (!colorPriorityListEl) return;
+      colorPriorityListEl.innerHTML = '';
+      priorityColors.forEach((colorId, index) => {
+        const swatch = document.createElement('div');
+        swatch.className = 'palette-swatch';
+        const rgb = getPaletteRgbById(colorId);
+        swatch.style.backgroundColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+        swatch.title = `Palette ID: ${colorId}`;
+        swatch.style.position = 'relative';
+        swatch.style.margin = '2px';
+        swatch.style.width = '24px';
+        swatch.style.height = '24px';
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '×';
+        deleteBtn.style.position = 'absolute';
+        deleteBtn.style.top = '-8px';
+        deleteBtn.style.right = '-8px';
+        deleteBtn.style.background = 'rgba(255,0,0,0.7)';
+        deleteBtn.style.color = 'white';
+        deleteBtn.style.border = 'none';
+        deleteBtn.style.borderRadius = '50%';
+        deleteBtn.style.width = '16px';
+        deleteBtn.style.height = '16px';
+        deleteBtn.style.fontSize = '10px';
+        deleteBtn.style.lineHeight = '1';
+        deleteBtn.style.padding = '0';
+        deleteBtn.style.cursor = 'pointer';
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          priorityColors.splice(index, 1);
+          savePriorityColors();
+          renderPriorityColors();
+        };
+        swatch.appendChild(deleteBtn);
+        colorPriorityListEl.appendChild(swatch);
+      });
+    }
+
+    if (clearPriorityListBtn) {
+      clearPriorityListBtn.addEventListener('click', () => {
+        priorityColors = [];
+        savePriorityColors();
+        renderPriorityColors();
+        showToast(t('messages.priorityListCleared'), 'success', 2000);
+      });
+    }
+
+    // New Pick Color button logic
+    if (pickColorToolBtn) {
+      pickColorToolBtn.addEventListener('click', () => {
+        isPickingColorMode = !isPickingColorMode;
+        if (isPickingColorMode) {
+          canvas.style.cursor = 'crosshair';
+          showToast(t('messages.pickColorModeOn'), 'info', 3000);
+        } else {
+          canvas.style.cursor = '';
+          showToast(t('messages.pickColorModeOff'), 'info', 2000);
+        }
+      });
+    }
+
+    // Handle clicks on canvas in picking color mode
+    // Handle clicks on canvas in picking color mode (consolidated from mousedown)
+    // Removed direct canvas.addEventListener('click', ...) as the logic is now in mousedown and returns early.
+    // This block is effectively removed by the previous diff.
+
+    function saveBrokenPixelColors() {
+      try {
+        localStorage.setItem(BROKEN_PIXEL_COLORS_STORAGE_KEY, JSON.stringify(brokenPixelPriorityColors));
+      } catch {}
+    }
+
+    function loadBrokenPixelColors() {
+      try {
+        const saved = localStorage.getItem(BROKEN_PIXEL_COLORS_STORAGE_KEY);
+        if (saved) {
+          brokenPixelPriorityColors = JSON.parse(saved);
+        }
+      } catch {
+        brokenPixelPriorityColors = [];
+      }
+    }
+
+    function renderBrokenPixelColors() {
+      if (!brokenPixelPriorityListEl) return;
+      brokenPixelPriorityListEl.innerHTML = '';
+      brokenPixelPriorityColors.forEach((colorId, index) => {
+        const swatch = document.createElement('div');
+        swatch.className = 'palette-swatch';
+        const rgb = getPaletteRgbById(colorId);
+        swatch.style.backgroundColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+        swatch.title = `Palette ID: ${colorId}`;
+        swatch.style.position = 'relative';
+        swatch.style.margin = '2px';
+        swatch.style.width = '24px';
+        swatch.style.height = '24px';
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '×';
+        deleteBtn.style.position = 'absolute';
+        deleteBtn.style.top = '-8px';
+        deleteBtn.style.right = '-8px';
+        deleteBtn.style.background = 'rgba(255,0,0,0.7)';
+        deleteBtn.style.color = 'white';
+        deleteBtn.style.border = 'none';
+        deleteBtn.style.borderRadius = '50%';
+        deleteBtn.style.width = '16px';
+        deleteBtn.style.height = '16px';
+        deleteBtn.style.fontSize = '10px';
+        deleteBtn.style.lineHeight = '1';
+        deleteBtn.style.padding = '0';
+        deleteBtn.style.cursor = 'pointer';
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          brokenPixelPriorityColors.splice(index, 1);
+          saveBrokenPixelColors();
+          renderBrokenPixelColors();
+        };
+        swatch.appendChild(deleteBtn);
+        brokenPixelPriorityListEl.appendChild(swatch);
+      });
+    }
+
+    if (addBrokenPixelColorBtn) {
+      addBrokenPixelColorBtn.addEventListener('click', () => {
+        // Just add currently selected color as broken pixel priority if a color is selected
+        if (selectedOverrideColorId != null && selectedOverrideColorId !== 0) {
+          if (!brokenPixelPriorityColors.includes(selectedOverrideColorId)) {
+            brokenPixelPriorityColors.push(selectedOverrideColorId);
+            saveBrokenPixelColors();
+            renderBrokenPixelColors();
+            showToast(t('messages.colorAddedToBrokenPixelList'), 'success', 2000);
+          } else {
+            showToast(t('messages.colorAlreadyInBrokenPixelList'), 'info', 2000);
+          }
+        } else {
+          showToast(t('messages.noColorSelected'), 'error', 2000);
+        }
+      });
+    }
+
+    const pickBrokenPixelColorToolBtn = document.getElementById('pick-broken-pixel-color-tool-btn');
+    if (pickBrokenPixelColorToolBtn) {
+      pickBrokenPixelColorToolBtn.addEventListener('click', () => {
+        isPickingBrokenPixelColorMode = !isPickingBrokenPixelColorMode;
+        if (isPickingBrokenPixelColorMode) {
+          canvas.style.cursor = 'crosshair';
+          showToast(t('messages.pickBrokenPixelColorModeOn'), 'info', 3000);
+        } else {
+          canvas.style.cursor = '';
+          showToast(t('messages.pickBrokenPixelColorModeOff'), 'info', 2000);
+        }
+      });
+    }
+
+    if (clearBrokenPixelListBtn) {
+      clearBrokenPixelListBtn.addEventListener('click', () => {
+        brokenPixelPriorityColors = [];
+        saveBrokenPixelColors();
+        renderBrokenPixelColors();
+        showToast(t('messages.brokenPixelListCleared'), 'success', 2000);
+      });
+    }
   </script>
 </body>
 </html> 
+
+
