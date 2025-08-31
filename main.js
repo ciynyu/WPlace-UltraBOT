@@ -8,13 +8,13 @@ const url = require('url');
 const { Worker } = require('worker_threads');
 */
 let axios; try { axios = require('axios'); } catch (e) { axios = null; }
-let puppeteer; try { puppeteer = require('puppeteer-extra'); } catch (e) { puppeteer = null; } // Sử dụng puppeteer-extra
-let stealth; try { stealth = require('puppeteer-extra-plugin-stealth'); } catch (e) { stealth = null; } // Thêm stealth plugin
+let puppeteer; try { puppeteer = require('puppeteer-extra'); } catch (e) { puppeteer = null; } // Use puppeteer-extra
+let stealth; try { stealth = require('puppeteer-extra-plugin-stealth'); } catch (e) { stealth = null; } // Add stealth plugin
 
 const UserAgent = require('user-agents'); // Import user-agents
 const { FingerprintGenerator } = require('fingerprint-generator'); // Import fingerprint-generator
 
-// Hàm utility để phân tích User-Agent string
+// Utility function to parse User-Agent string
 function parseUserAgent(uaString) {
     let browser = { name: 'unknown', version: 0 };
     let os = { name: 'unknown', version: 0 };
@@ -22,8 +22,11 @@ function parseUserAgent(uaString) {
     if (!uaString) return { browser, os };
 
     // Detect OS
-    if (uaString.includes('Windows NT 10.0')) {
-        os = { name: 'windows', version: 10 };
+    if (uaString.includes('Windows NT 10.0')) { // Windows 10/11: 10.0 could be 10 or 11
+        os = { name: 'windows', version: 10 }; // Default to Windows 10 if nothing else
+        if (uaString.includes('Windows NT 10.0') && uaString.includes('Win64; x64') && uaString.includes('rv:')) { // More detailed check for Win 11
+          os = { name: 'windows', version: 11 };
+        }
     } else if (uaString.includes('Windows NT 6.3')) {
         os = { name: 'windows', version: 8.1 };
     } else if (uaString.includes('Windows NT 6.2')) {
@@ -34,7 +37,7 @@ function parseUserAgent(uaString) {
             os = { name: 'macos', version: parseFloat(`${osVersionMatch[1]}.${osVersionMatch[2]}`) };
         }
     } else if (uaString.includes('Linux')) {
-        os = { name: 'linux', version: 0 }; // Không có phiên bản cụ thể dễ dàng từ UA Linux
+        os = { name: 'linux', version: 0 }; // No specific version easily from Linux UA
     }
 
     // Detect Browser
@@ -53,35 +56,45 @@ function parseUserAgent(uaString) {
 }
 
 
-let DEBUG = true; // Mặc định bật debug
+let DEBUG = true; // Debug enabled by default
 let DEBUG_MASK = !(process.env.DEBUG_MASK === '0' || process.env.DEBUG_MASK === 'false');
+let DEBUG_INBOUND_ENABLED = false; // Inbound logging permanently off
 function enableDebug() { DEBUG = true; }
 function enableDebugFull() { DEBUG = true; DEBUG_MASK = false; }
 function maskToken(str) {
   if (!str) return '';
-  const s = String(str);
-  if (s.length <= 8) return '***';
-  return s.slice(0, 4) + '…' + s.slice(-4);
+  if (!DEBUG_MASK) return String(str);
+  let out = String(str);
+  if (str.length <= 8) return '***';
+  return str.slice(0, 4) + '…' + str.slice(-4);
 }
-function debugLog(type, ...args) { if (DEBUG) { try { console.log(`[debug][${(new Date()).toISOString()}] [${type}]`, ...args); } catch {} } }
+function debugLog(type, ...args) {
+  if (DEBUG) {
+    // Only log INBOUND if DEBUG_INBOUND_ENABLED is true
+    if (type === 'INBOUND' && !DEBUG_INBOUND_ENABLED) {
+      return;
+    }
+    try { console.log(`[debug][${(new Date()).toISOString()}] [${type}]`, ...args); } catch {}
+  }
+}
 module.exports.debugLog = debugLog; // Export debugLog
 
-// Hàm tạo User-Agent và Fingerprint ngẫu nhiên và đồng bộ
+// Function to generate random and synchronized User-Agent and Fingerprint
 function generateAntiDetectionParams() {
     try {
         const osOptions = [
-            { name: 'Windows', minVersion: 10 }, // Windows 10 trở lên
-            { name: 'Mac OS X', minVersion: 10.15 }, // macOS Catalina (10.15) trở lên
+            { name: 'Windows', minVersion: 10 }, // Windows 10 or later
+            { name: 'Mac OS X', minVersion: 10.15 }, // macOS Catalina (10.15) or later
             { name: 'Linux' }
         ];
         const browserOptions = ['Chrome', 'Firefox', 'Edge'];
 
-        // Tạo User-Agent
+        // Generate User-Agent
         const userAgentGenerator = new UserAgent({
             deviceCategory: 'desktop',
             os: osOptions,
             browser: browserOptions,
-            // user-agents sẽ tự chọn phiên bản gần nhất nếu không chỉ định rõ
+            // user-agents will automatically select the closest version if not specified
         });
         const newUserAgent = userAgentGenerator.toString();
 
@@ -90,20 +103,20 @@ function generateAntiDetectionParams() {
             return null;
         }
 
-        // Phân tích User-Agent để lấy thông tin cho Fingerprint Generator
+        // Parse User-Agent to get information for Fingerprint Generator
         const parsedUAInfo = parseUserAgent(newUserAgent);
 
-        // Kiểm tra xem parseUserAgent có trả về thông tin hợp lệ không
+        // Check if parseUserAgent returned valid information
         if (!parsedUAInfo.browser.name || parsedUAInfo.browser.version === 0 || !parsedUAInfo.os.name) {
             debugLog('ERROR', 'Failed to parse User-Agent for fingerprint generation:', newUserAgent);
             return null;
         }
 
-        // Xác định phiên bản trình duyệt và hệ điều hành cho fingerprint-generator
-        // Đảm bảo không quá cũ và đồng bộ với User-Agent
+        // Determine browser and OS versions for fingerprint-generator
+        // Ensure they are not too old and are synchronized with the User-Agent
         const browserConfig = {
             name: parsedUAInfo.browser.name,
-            minVersion: Math.max(parsedUAInfo.browser.version - 2, 80), // Đảm bảo phiên bản không quá cũ (ví dụ: > 80)
+            minVersion: Math.max(parsedUAInfo.browser.version - 2, 80), // Ensure version is not too old (e.g., > 80)
             maxVersion: parsedUAInfo.browser.version
         };
 
@@ -113,17 +126,17 @@ function generateAntiDetectionParams() {
         } else if (parsedUAInfo.os.name === 'macos') {
             osConfig = { name: 'macos', minVersion: parsedUAInfo.os.version, maxVersion: parsedUAInfo.os.version };
         } else { // linux
-            osConfig = { name: 'linux' }; // fingerprint-generator tự xử lý phiên bản Linux
+            osConfig = { name: 'linux' }; // fingerprint-generator automatically handles Linux versions
         }
 
         const fingerprintGen = new FingerprintGenerator({
             browsers: [browserConfig],
             operatingSystems: [osConfig],
             devices: ['desktop'],
-            // Các tham số khác có thể thêm để tạo fingerprint chi tiết hơn nếu cần
+            // Other parameters can be added for more detailed fingerprinting if needed
         });
         const { fingerprint: newFingerprint, headers: newHeaders } = fingerprintGen.getFingerprint({
-            userAgent: newUserAgent // Sử dụng chính User-Agent đã tạo để đảm bảo đồng bộ
+            userAgent: newUserAgent // Use the exact User-Agent created to ensure synchronization
         });
 
         if (!newFingerprint) {
@@ -134,7 +147,7 @@ function generateAntiDetectionParams() {
         return { userAgent: newUserAgent, fingerprint: newFingerprint, headers: newHeaders };
     } catch (e) {
         debugLog('CRITICAL', 'Exception during anti-detection params generation:', e.message);
-        return null; // Trả về null nếu có lỗi
+        return null; // Return null if an error occurs
     }
 }
 function maskCookieHeader(cookieHeader) {
@@ -232,6 +245,7 @@ function readJson(filePath, fallback) {
   }
 }
 function writeJson(filePath, data) {
+  debugLog('DEBUG', `Writing to file ${filePath}:`, data);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
@@ -271,6 +285,24 @@ function ensureDb() {
       }
     } catch {}
   }
+  if (!fs.existsSync(ACCOUNTS_FILE)) {
+    try { fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify([], null, 2)); } catch {}
+  } else {
+    // Migrate old accounts.json to include lastRefresh if missing
+    try {
+      const accounts = readJson(ACCOUNTS_FILE, []);
+      let changed = false;
+      for (let i = 0; i < accounts.length; i++) {
+        if (accounts[i].lastRefresh == null) {
+          accounts[i].lastRefresh = Date.now(); // Default to current time for proper interval calculation
+          changed = true;
+        }
+      }
+      if (changed) {
+        writeJson(ACCOUNTS_FILE, accounts);
+      }
+    } catch {}
+  }
 
   if (!fs.existsSync(FAVORITES_FILE)) {
     try { fs.writeFileSync(FAVORITES_FILE, JSON.stringify([], null, 2)); } catch {}
@@ -304,8 +336,8 @@ function deactivateAccountByToken(jToken) {
     const current = accounts[idx] || {};
     const updated = { ...current, active: false };
     accounts[idx] = updated;
+    debugLog('INFO', `Deactivating account ${current && current.name ? current.name : '(unknown)'} due to 500 when posting pixel.`);
     writeJson(ACCOUNTS_FILE, accounts);
-    console.log('[auto] account deactivated due to 500 when posting pixel:', current && current.name ? current.name : '(unknown)');
   } catch {}
 }
 
@@ -341,7 +373,7 @@ async function requestMeLikePython(opts) {
   const options = {
     url: 'https://backend.wplace.live/me',
     headers: {
-      'User-Agent': opts.userAgent || 'Mozilla/5.0', // Sử dụng userAgent từ opts
+      'User-Agent': opts.userAgent || 'Mozilla/5.0', // Use userAgent from opts
       'Cookie': cookieHeader
     },
     decompress: false,
@@ -379,7 +411,7 @@ async function fetchMeAxios(cf_clearance, token, userAgent = 'Mozilla/5.0') {
   const enableAntiDetection = globalSettings.enableAntiDetection || false;
   let currentAccountUserAgent = userAgent;
 
-  // Lấy User-Agent đã lưu cho tài khoản nếu enableAntiDetection bật
+  // Get the User-Agent saved for the account if enableAntiDetection is on
   if (enableAntiDetection) {
     const accounts = readJson(ACCOUNTS_FILE, []);
     const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === token);
@@ -396,7 +428,7 @@ async function fetchMeAxios(cf_clearance, token, userAgent = 'Mozilla/5.0') {
   }
 */
   const headers = {
-    'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
+    'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
     'Accept': 'application/json, text/plain, */*',
     'Cookie': `cf_clearance=${cf_clearance || ''}; j=${token || ''}`
   };
@@ -413,7 +445,7 @@ async function fetchMe(cf_clearance, token, userAgent = 'Mozilla/5.0') {
   const enableAntiDetection = globalSettings.enableAntiDetection || false;
   let currentAccountUserAgent = userAgent;
 
-  // Lấy User-Agent đã lưu cho tài khoản nếu enableAntiDetection bật
+  // Get the User-Agent saved for the account if enableAntiDetection is on
   if (enableAntiDetection) {
     const accounts = readJson(ACCOUNTS_FILE, []);
     const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === token);
@@ -458,7 +490,7 @@ async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', 
   let currentAccountUserAgent = userAgent;
   let currentAccountFingerprint = fingerprint;
 
-  // Lấy User-Agent và Fingerprint đã lưu cho tài khoản nếu enableAntiDetection bật
+  // Get the User-Agent and Fingerprint saved for the account if enableAntiDetection is on
 /*  if (enableAntiDetection) {
     const acc = accountManager.findAccountByToken(token);
     if (acc) {
@@ -473,7 +505,7 @@ async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', 
         currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
       }
 */
-  // Lấy User-Agent và Fingerprint đã lưu cho tài khoản nếu enableAntiDetection bật
+  // Get the User-Agent and Fingerprint saved for the account if enableAntiDetection is on
   if (enableAntiDetection) {
     const accounts = readJson(ACCOUNTS_FILE, []);
     const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === token);
@@ -502,23 +534,23 @@ async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', 
     }
   }
 
-  // Sử dụng stealth plugin với các tùy chỉnh từ fingerprint
+  // Use stealth plugin with customizations from fingerprint
   if (stealth) {
     puppeteer.use(stealth({
-      // Hiện tại, stealth plugin tự động xử lý nhiều khía cạnh của fingerprinting.
-      // Các thuộc tính cụ thể từ `currentAccountFingerprint` có thể được dùng để tinh chỉnh nếu cần
-      // và nếu stealth plugin có các tùy chọn tương ứng (ví dụ: webgl, canvas)
+      // Currently, the stealth plugin automatically handles many aspects of fingerprinting.
+      // Specific properties from `currentAccountFingerprint` can be used for fine-tuning if needed
+      // and if the stealth plugin has corresponding options (e.g., webgl, canvas)
     }));
   }
 
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
   try {
     const page = await browser.newPage();
-    await page.setUserAgent(currentAccountUserAgent); // Đặt User-Agent
+    await page.setUserAgent(currentAccountUserAgent); // Set User-Agent
 
-    // Cố gắng mô phỏng fingerprint nếu có và hợp lệ
+    // Attempt to emulate fingerprint if present and valid
     if (currentAccountFingerprint) {
-      // Đặt viewport nếu có screenResolution
+      // Set viewport if screenResolution is available
       if (currentAccountFingerprint.screenResolution && currentAccountFingerprint.screenResolution.value) {
         await page.setViewport({
           width: currentAccountFingerprint.screenResolution.value.width,
@@ -526,7 +558,7 @@ async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', 
         }).catch(e => debugLog('WARNING', `Could not set viewport: ${e.message}`));
       }
 
-      // Mô phỏng các thuộc tính navigator khác (ví dụ: languages, platform, plugins)
+      // Emulate other navigator properties (e.g., languages, platform, plugins)
       await page.evaluateOnNewDocument((fp) => {
         if (fp.languages && fp.languages.value) {
           Object.defineProperty(navigator, 'languages', {
@@ -538,8 +570,8 @@ async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', 
             get: () => fp.platform.value,
           });
         }
-        // Thêm các thuộc tính khác nếu cần (ví dụ: vendor, appVersion, deviceMemory, hardwareConcurrency)
-        // Lưu ý: một số thuộc tính có thể được xử lý tốt hơn bởi stealth plugin
+        // Add other properties if needed (e.g., vendor, appVersion, deviceMemory, hardwareConcurrency)
+        // Note: some properties may be handled better by the stealth plugin
       }, currentAccountFingerprint);
     }
     
@@ -564,7 +596,7 @@ async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', 
           const text = await response.text();
           bodyPreview = text.slice(0, 300);
         } catch (e) {
-          bodyPreview = `Không thể đọc body: ${e.message}`;
+          bodyPreview = `Could not read body: ${e.message}`;
         }
         debugLog('OUTBOUND_PUPPETEER_RESPONSE', `Response for ${response.request().method()} ${url}`, {
           status,
@@ -596,7 +628,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
   const enableAntiDetection = globalSettings.enableAntiDetection || false;
   let currentAccountUserAgent = userAgent;
 
-  // Lấy User-Agent đã lưu cho tài khoản nếu enableAntiDetection bật
+  // Get the User-Agent saved for the account if enableAntiDetection is on
   if (enableAntiDetection) {
     const accounts = readJson(ACCOUNTS_FILE, []);
     const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === token);
@@ -618,7 +650,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
         url: 'https://backend.wplace.live/purchase',
         method: 'POST',
         headers: {
-          'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
+          'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
           'Accept': 'application/json, text/plain, */*',
           'Origin': 'https://wplace.live',
           'Referer': 'https://wplace.live/',
@@ -649,7 +681,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
         path: '/purchase',
         method: 'POST',
         headers: {
-          'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
+          'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
           'Accept': 'application/json, text/plain, */*',
           'Origin': 'https://wplace.live',
           'Referer': 'https://wplace.live/',
@@ -680,13 +712,13 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
 }
 
 function startServer(port, host) {
-  const server = http.createServer(async (req, res) => { // Thêm async ở đây
+  const server = http.createServer(async (req, res) => { // Add async here
     const parsed = url.parse(req.url, true);
     ensureDb();
-    // Endpoint mới để kiểm tra trạng thái của server
+    // New endpoint to check server status
     if (parsed.pathname === '/api/status' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', debugMode: DEBUG, debugMask: DEBUG_MASK }));
+      res.end(JSON.stringify({ status: 'ok', debugMode: DEBUG, debugMask: DEBUG_MASK, debugInboundEnabled: DEBUG_INBOUND_ENABLED }));
       return;
     }
 
@@ -694,7 +726,7 @@ function startServer(port, host) {
     if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
       try {
         requestBody = await readJsonBody(req);
-        // Để không đọc lại body, đẩy lại vào req
+        // To avoid re-reading the body, push it back into req
         req.body = requestBody;
       } catch (e) {
         debugLog('INBOUND_ERROR', `Failed to parse request body for ${req.method} ${req.url}: ${e.message}`);
@@ -716,11 +748,11 @@ function startServer(port, host) {
           res.end(html);
         } catch (e) {
           res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-          res.end('index.html okunamadı.');
+          res.end('index.html could not be read.');
         }
       } else {
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('index.html bulunamadı.');
+        res.end('index.html not found.');
       }
       return;
     }
@@ -778,32 +810,32 @@ function startServer(port, host) {
     }
     // Receive token captured by extension and notify connected UIs
     if (parsed.pathname === '/api/token' && req.method === 'POST') {
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       const token = body && typeof body.token === 'string' ? body.token : '';
       const worldX = (body && (typeof body.worldX === 'string' || typeof body.worldX === 'number')) ? body.worldX : null;
       const worldY = (body && (typeof body.worldY === 'string' || typeof body.worldY === 'number')) ? body.worldY : null;
       const userAgent = (body && typeof body.userAgent === 'string') ? body.userAgent : null;
       const fingerprint = (body && typeof body.fingerprint === 'object') ? body.fingerprint : null;
-      // Lấy enableAntiDetection từ settings.json
+      // Get enableAntiDetection from settings.json
       const globalSettings = readJson(SETTINGS_FILE, {});
       const enableAntiDetection = globalSettings.enableAntiDetection || false;
 
       if (!token) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ ok: false })); return; }
         try {
-          // Lưu trữ userAgent và fingerprint vào settings.json nếu đó là token chính
-          // (Chỉ áp dụng nếu đây là một token độc lập, không phải tài khoản)
-          // Hiện tại, chúng ta lưu trữ UA và FP trên từng tài khoản
+          // Store userAgent and fingerprint in settings.json if it's the main token
+          // (Only applies if this is a standalone token, not an account)
+          // Currently, we store UA and FP on each account
           const existingSettings = readJson(SETTINGS_FILE, { cf_clearance: '', worldX: null, worldY: null, userAgent: null, fingerprint: null });
           const mergedSettings = { ...existingSettings };
           if (worldX != null) mergedSettings.worldX = Number(worldX);
           if (worldY != null) mergedSettings.worldY = Number(worldY);
-          // Không cập nhật userAgent và fingerprint ở đây nữa, chúng sẽ được lưu vào tài khoản
+          // Do not update userAgent and fingerprint here anymore, they will be saved to the account
           writeJson(SETTINGS_FILE, mergedSettings);
         } catch {}
         sseBroadcast('token', { token, worldX, worldY, userAgent, fingerprint });
         res.writeHead(204, { 'Access-Control-Allow-Origin': '*' });
         res.end();
-      // Loại bỏ .catch() vì body đã được xử lý ở đầu hàm
+      // Remove .catch() because body has been handled at the beginning of the function
       return;
     }
 
@@ -815,7 +847,7 @@ function startServer(port, host) {
       return;
     }
     if (parsed.pathname === '/api/favorites' && req.method === 'POST') {
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       try {
         const name = (body && typeof body.name === 'string') ? body.name : '';
         const modeRaw = (body && typeof body.mode === 'string') ? body.mode : '';
@@ -848,11 +880,11 @@ function startServer(port, host) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'failed to save' }));
         }
-      // Loại bỏ .catch()
+      // Remove .catch()
       return;
     }
     if (parsed.pathname === '/api/favorites' && req.method === 'DELETE') {
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       try {
         const modeRaw = (body && typeof body.mode === 'string') ? body.mode : '';
         const mode = (modeRaw === 'mosaic' || modeRaw === 'single') ? modeRaw : '';
@@ -875,7 +907,7 @@ function startServer(port, host) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'failed to delete' }));
         }
-      // Loại bỏ .catch()
+      // Remove .catch()
       return;
     }
     // Update global settings
@@ -887,7 +919,7 @@ function startServer(port, host) {
       return;
     }
     if (parsed.pathname === '/api/settings/update-interval' && req.method === 'POST') {
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       const updateIntervalMinutes = Number(body && body.updateIntervalMinutes);
       if (!Number.isFinite(updateIntervalMinutes) || updateIntervalMinutes <= 0) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -899,14 +931,14 @@ function startServer(port, host) {
         writeJson(SETTINGS_FILE, settings);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ success: true }));
-      // Loại bỏ .catch()
+      // Remove .catch()
       return;
     }
     if (parsed.pathname && /^\/api\/pixel\/([^\/]+)\/([^\/]+)$/.test(parsed.pathname) && req.method === 'POST') {
       const m = parsed.pathname.match(/^\/api\/pixel\/([^\/]+)\/([^\/]+)$/);
       const area = m && m[1] ? m[1] : '';
       const no = m && m[2] ? m[2] : '';
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       try {
         const colors = Array.isArray(body && body.colors) ? body.colors : [];
         const coords = Array.isArray(body && body.coords) ? body.coords : [];
@@ -954,7 +986,7 @@ function startServer(port, host) {
                 url: 'https://backend.wplace.live' + remotePath,
                 method: 'POST',
                 headers: {
-                  'User-Agent': currentAccountUserAgent, // Sử dụng userAgent từ tài khoản
+                  'User-Agent': currentAccountUserAgent, // Use userAgent from the account
                   'Accept': '*/*',
                   'Origin': 'https://wplace.live',
                   'Referer': 'https://wplace.live/',
@@ -985,7 +1017,7 @@ function startServer(port, host) {
             method: 'POST',
             agent: HTTPS_AGENT,
             headers: {
-              'User-Agent': currentAccountUserAgent, // Sử dụng userAgent từ tài khoản
+              'User-Agent': currentAccountUserAgent, // Use userAgent from the account
               'Accept': '*/*',
               'Origin': 'https://wplace.live',
               'Referer': 'https://wplace.live/',
@@ -1022,7 +1054,7 @@ function startServer(port, host) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'proxy failed' }));
         }
-      // Loại bỏ .catch()
+      // Remove .catch()
       return;
     }
     // Original pixel POST endpoint logic. Temporarily uncommented to restore.
@@ -1078,7 +1110,7 @@ function startServer(port, host) {
 
     // Proxy purchase to backend.wplace.live
     if (parsed.pathname === '/api/purchase' && req.method === 'POST') {
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       try {
         const productIdRaw = body && body.productId;
         const amountRaw = body && body.amount;
@@ -1118,7 +1150,7 @@ function startServer(port, host) {
                 url: 'https://backend.wplace.live' + remotePath,
                 method: 'POST',
                 headers: {
-                  'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
+                  'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
                   'Accept': 'application/json, text/plain, */*',
                   'Origin': 'https://wplace.live',
                   'Referer': 'https://wplace.live/',
@@ -1162,7 +1194,7 @@ function startServer(port, host) {
             method: 'POST',
             agent: HTTPS_AGENT,
             headers: {
-              'User-Agent': currentAccountUserAgent, // Sử dụng userAgent đã truyền vào hoặc từ tài khoản
+              'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
               'Accept': 'application/json, text/plain, */*',
               'Origin': 'https://wplace.live',
               'Referer': 'https://wplace.live/',
@@ -1196,18 +1228,12 @@ function startServer(port, host) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'proxy failed' }));
         }
-      // Loại bỏ .catch()
+      // Remove .catch()
       return;
     }
     if (parsed.pathname === '/api/accounts' && req.method === 'GET') {
       const accounts = readJson(ACCOUNTS_FILE, []);
       try {
-        for (let i = 0; i < accounts.length; i++) {
-          const a = accounts[i];
-          const cf = a && typeof a.cf_clearance === 'string' ? a.cf_clearance : '';
-          if (!cf || cf.length < 30) { accounts[i] = { ...a, active: false }; }
-        }
-        writeJson(ACCOUNTS_FILE, accounts);
       } catch {}
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(accounts));
@@ -1235,6 +1261,7 @@ function startServer(port, host) {
       const id = Number(idStr);
       const accounts = readJson(ACCOUNTS_FILE, []);
       const next = accounts.filter(a => a.id !== id);
+      debugLog('INFO', `Account deleted: ID ${id}`);
       writeJson(ACCOUNTS_FILE, next);
       res.writeHead(204); res.end();
       return;
@@ -1242,7 +1269,7 @@ function startServer(port, host) {
     if (parsed.pathname && parsed.pathname.startsWith('/api/accounts/') && (req.method === 'PUT' || req.method === 'PATCH')) {
       const idStr = parsed.pathname.split('/').pop();
       const id = Number(idStr);
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       const accounts = readJson(ACCOUNTS_FILE, []);
       const idx = accounts.findIndex(a => a.id === id);
       if (idx === -1) {
@@ -1251,7 +1278,7 @@ function startServer(port, host) {
         return;
       }
         const updated = { ...accounts[idx] };
-        if (body.hasOwnProperty('name')) updated.name = String(body.name || ''); // Cho phép name rỗng hoặc không có
+        if (body.hasOwnProperty('name')) updated.name = String(body.name || ''); // Allow empty name or no name
         if (typeof body.token === 'string') updated.token = body.token;
         if (typeof body.cf_clearance === 'string') {
           const newCf = String(body.cf_clearance);
@@ -1276,7 +1303,7 @@ function startServer(port, host) {
     if (parsed.pathname && parsed.pathname.startsWith('/api/accounts/') && (req.method === 'PUT' || req.method === 'PATCH')) {
       const idStr = parsed.pathname.split('/').pop();
       const id = Number(idStr);
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       
       const existingAccount = accountManager.getAccounts().find(a => a.id === id);
       if (!existingAccount) {
@@ -1285,7 +1312,7 @@ function startServer(port, host) {
         return;
       }
         const updated = { ...existingAccount }; // Start with existing account
-        if (body.hasOwnProperty('name')) updated.name = String(body.name || ''); // Cho phép name rỗng hoặc không có
+        if (body.hasOwnProperty('name')) updated.name = String(body.name || ''); // Allow empty name or no name
         if (typeof body.token === 'string') updated.token = body.token;
         if (typeof body.cf_clearance === 'string') {
           const newCf = String(body.cf_clearance);
@@ -1321,11 +1348,11 @@ function startServer(port, host) {
                 updated.fingerprint = null;
             }
         } else if (!enableAntiDetection) {
-            // Nếu anti-detection bị tắt, xóa userAgent và fingerprint
+            // If anti-detection is disabled, delete userAgent and fingerprint
             updated.userAgent = null;
             updated.fingerprint = null;
         } else {
-            // Nếu anti-detection bật và không yêu cầu regenerate, giữ nguyên các giá trị hiện có
+            // If anti-detection is enabled and regenerate is not requested, keep existing values
             if (typeof body.userAgent === 'string') updated.userAgent = body.userAgent;
             if (typeof body.fingerprint === 'object') updated.fingerprint = body.fingerprint;
         }
@@ -1342,17 +1369,17 @@ function startServer(port, host) {
         writeJson(ACCOUNTS_FILE, accounts);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(updated));
-      // Loại bỏ .catch()
+      // Remove .catch()
       return;
     }
     // Settings endpoints removed; cf_clearance is now per-account
     if (parsed.pathname === '/api/accounts' && req.method === 'POST') {
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       const name = (body && body.name) ? String(body.name) : '';
       const token = (body && body.token) ? String(body.token) : '';
       const cf_clearance = (body && body.cf_clearance) ? String(body.cf_clearance) : '';
-      // Các trường userAgent và fingerprint trong body không được sử dụng trực tiếp nữa,
-      // mà sẽ được tạo ngẫu nhiên nếu enableAntiDetection bật.
+      // The userAgent and fingerprint fields in the body are no longer used directly,
+      // but will be randomly generated if enableAntiDetection is on.
       if (!name || !token || !cf_clearance || cf_clearance.length < 30) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ error: 'name, token and cf_clearance required' }));
@@ -1396,12 +1423,12 @@ function startServer(port, host) {
     }
     // Settings endpoints removed; cf_clearance is now per-account
     if (parsed.pathname === '/api/accounts' && req.method === 'POST') {
-      const body = req.body; // Sử dụng body đã được đọc
+      const body = req.body; // Use the already read body
       const name = (body && body.name) ? String(body.name) : '';
       const token = (body && body.token) ? String(body.token) : '';
       const cf_clearance = (body && body.cf_clearance) ? String(body.cf_clearance) : '';
-      // Các trường userAgent và fingerprint trong body không được sử dụng trực tiếp nữa,
-      // mà sẽ được tạo ngẫu nhiên nếu enableAntiDetection bật.
+      // The userAgent and fingerprint fields in the body are no longer used directly,
+      // but will be randomly generated if enableAntiDetection is on.
       if (!name || !token || !cf_clearance || cf_clearance.length < 30) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ error: 'name, token and cf_clearance required' }));
@@ -1434,8 +1461,8 @@ function startServer(port, host) {
           name,
           token,
           cf_clearance,
-          userAgent: generatedUserAgent, // Sử dụng userAgent đã tạo hoặc null
-          fingerprint: generatedFingerprint, // Sử dụng fingerprint đã tạo hoặc null
+          userAgent: generatedUserAgent, // Use generated userAgent or null
+          fingerprint: generatedFingerprint, // Use generated fingerprint or null
           pixelCount: null,
           pixelMax: null,
           droplets: null,
@@ -1445,9 +1472,9 @@ function startServer(port, host) {
           lastRefresh: Date.now()
         };
         try {
-          // Khi tạo tài khoản mới, fetchMe không nên sử dụng userAgent ngẫu nhiên vì có thể chưa hợp lệ.
-          // Thay vào đó, nó nên sử dụng userAgent mặc định hoặc userAgent từ tài khoản nếu có.
-          const me = await fetchMe(cf_clearance, token, account.userAgent); // Sử dụng generatedUserAgent nếu có
+          // When creating a new account, fetchMe should not use a random userAgent as it may not be valid yet.
+          // Instead, it should use the default userAgent or the userAgent from the account if available.
+          const me = await fetchMe(cf_clearance, token, account.userAgent); // Use generatedUserAgent if available
           if (me && me.charges) {
             account.pixelCount = Number(me.charges.count);
             account.pixelMax = Number(me.charges.max);
@@ -1456,6 +1483,9 @@ function startServer(port, host) {
           if (me && Object.prototype.hasOwnProperty.call(me, 'droplets')) {
             const d = Number(me.droplets);
             account.droplets = Number.isFinite(d) ? Math.floor(d) : null;
+            if (account.droplets === null) {
+              debugLog('WARNING', `Droplets for new account ${account.name} set to null. Original value: ${me.droplets}`);
+            }
           }
           if (me && Object.prototype.hasOwnProperty.call(me, 'extraColorsBitmap')) {
             const b = Number(me.extraColorsBitmap);
@@ -1468,7 +1498,7 @@ function startServer(port, host) {
         writeJson(ACCOUNTS_FILE, accounts);
         res.writeHead(201, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(account));
-      // Loại bỏ .catch()
+      // Remove .catch()
       return;
     }
     if (parsed.pathname && /^\/api\/accounts\/\d+\/refresh$/.test(parsed.pathname) && req.method === 'POST') {
@@ -1514,21 +1544,26 @@ function startServer(port, host) {
         if (me && Object.prototype.hasOwnProperty.call(me, 'droplets')) {
           const d = Number(me.droplets);
           acct.droplets = Number.isFinite(d) ? Math.floor(d) : null;
+          if (acct.droplets === null) {
+            debugLog('WARNING', `Droplets for account ${acct.name} update set to null. Original value: ${me.droplets}`);
+          }
         }
         if (me && Object.prototype.hasOwnProperty.call(me, 'extraColorsBitmap')) {
           const b = Number(me.extraColorsBitmap);
           acct.extraColorsBitmap = Number.isFinite(b) ? Math.floor(b) : null;
         }
+        const now = Date.now(); // Define now for this scope
         acct.lastRefresh = now; // Update last refresh time
         updatedAccounts = true;
         accounts[idx] = acct;
+        debugLog('INFO', `Account refreshed and updated: ${acct.name}`, acct);
         writeJson(ACCOUNTS_FILE, accounts);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(acct));
       })().catch(() => {
         res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ error: 'upstream error' }));
-      })(); // đóng async function tự gọi
+      }); // close self-invoking async function
       return;
     }
     
@@ -1551,6 +1586,7 @@ function startServer(port, host) {
       const body = req.body;
       const enable = body && typeof body.enable === 'boolean' ? body.enable : null;
       const mask = body && typeof body.mask === 'boolean' ? body.mask : null;
+      const inboundEnabled = body && typeof body.inboundEnabled === 'boolean' ? body.inboundEnabled : null;
       if (enable !== null) {
         DEBUG = enable;
         console.log(`Debug mode set to: ${DEBUG}`);
@@ -1559,8 +1595,12 @@ function startServer(port, host) {
         DEBUG_MASK = mask;
         console.log(`Debug mask set to: ${DEBUG_MASK}`);
       }
+      if (inboundEnabled !== null) {
+        DEBUG_INBOUND_ENABLED = inboundEnabled;
+        console.log(`Debug inbound enabled set to: ${DEBUG_INBOUND_ENABLED}`);
+      }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ DEBUG, DEBUG_MASK }));
+      res.end(JSON.stringify({ DEBUG, DEBUG_MASK, DEBUG_INBOUND_ENABLED }));
       return;
     }
     if (parsed.pathname === '/favicon.ico') {
@@ -1574,6 +1614,7 @@ function startServer(port, host) {
   });
 }
 
+// Define the main function here so it can be accessed
 function main() {
   const args = process.argv.slice(2);
   
@@ -1630,6 +1671,7 @@ async function startAccountRefreshScheduler() {
     // const accounts = accountManager.getAccounts(); // Already get the latest accounts at the beginning of the function
     const accounts = readJson(ACCOUNTS_FILE, []);
     const now = Date.now();
+    const initialAccounts = JSON.parse(JSON.stringify(accounts)); // Make a deep copy to compare later
     let updatedAccounts = false;
 
     for (let i = 0; i < accounts.length; i++) {
@@ -1639,7 +1681,7 @@ async function startAccountRefreshScheduler() {
         console.log(`Refreshing account: ${account.name}`);
         const cf = account.cf_clearance;
         try {
-          const me = await fetchMe(cf, account.token, account.userAgent); // Truyền userAgent
+          const me = await fetchMe(cf, account.token);
           if (me && me.charges) {
             account.pixelCount = Math.floor(Number(me.charges.count));
             account.pixelMax = Math.floor(Number(me.charges.max));
@@ -1667,11 +1709,11 @@ async function startAccountRefreshScheduler() {
     }
 
     if (updatedAccounts) {
+      debugLog('INFO', 'Scheduler: Saving updated accounts to disk.');
       writeJson(ACCOUNTS_FILE, accounts);
     }
   }, intervalMs);
 }
- 
 if (require.main === module) {
   main();
 }

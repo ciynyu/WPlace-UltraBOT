@@ -38,4 +38,9 @@ window.addEventListener('message', function(ev) {
 	} catch (e) {}
 })();
 
-
+// Send message to background script when content script is loaded
+try {
+	chrome.runtime.sendMessage({ type: 'wplace_content_script_loaded' });
+} catch (e) {
+	console.warn("[WPlace-Helper] Failed to send 'content_script_loaded' message:", e);
+}

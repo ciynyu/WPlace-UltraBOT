@@ -3,7 +3,8 @@
     "accounts": "Comptes"
   },
   "pixel": {
-    "powerLabel": "Puissance de pixels : {count} / {max}"
+    "powerLabel": "Puissance de pixels : {count} / {max}",
+    "totalDroplets": "Total Droplets"
   },
   "ready": {
     "prepare": "Prêt",
@@ -140,7 +141,7 @@
     "selectAccountFirst": "Sélectionnez d'abord un compte.",
     "maxPixelsReached": "Vous avez atteint le nombre maximum de pixels : {limit}/{limit}",
     "addCfClearancePrompt": "Ajoutez d'abord la valeur cf_clearance dans Paramètres (min. 30 caractères).",
-    "max12Accounts": "Vous pouvez sélectionner jusqu'à 12 comptes.",
+    "max200Accounts": "Vous pouvez sélectionner jusqu'à 200 comptes.",
     "startRequirementsMissing": "Pour démarrer, saisissez un jeton, sélectionnez des comptes et au moins 1 pixel.",
     "noSelectedImage": "Aucune image sélectionnée.",
     "errorGeneric": "Erreur",

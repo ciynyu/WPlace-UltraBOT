@@ -3,7 +3,8 @@
     "accounts": "Accounts"
   },
   "pixel": {
-    "powerLabel": "Pixel power: {count} / {max}"
+    "powerLabel": "Pixel power: {count} / {max}",
+    "totalDroplets": "Total Droplets"
   },
   "ready": {
     "prepare": "Ready",
@@ -80,7 +81,8 @@
     "ditheringOff": "Dithering: OFF"
   },
   "settings": {
-    "cf_clearance": "cf_clearance"
+    "cf_clearance": "cf_clearance",
+    "updateIntervalMinutes": "Update Interval (minutes)"
   },
   "mosaic": {
     "title": "Mosaic",
@@ -128,7 +130,7 @@
     "selectAccountFirst": "Select an account first.",
     "maxPixelsReached": "You have reached the maximum pixel count: {limit}/{limit}",
     "addCfClearancePrompt": "First add the cf_clearance value in Settings (min 30 chars).",
-    "max12Accounts": "You can select up to 12 accounts.",
+    "max200Accounts": "You can select up to 200 accounts.",
     "startRequirementsMissing": "Enter token, select accounts and pick at least 1 pixel to start.",
     "noSelectedImage": "No selected image.",
     "errorGeneric": "Error",

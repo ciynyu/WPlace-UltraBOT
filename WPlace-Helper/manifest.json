@@ -9,11 +9,13 @@
   "permissions": [
     "storage",
     "cookies",
-    "alarms"
+    "alarms",
+    "clipboardRead"
    ],
    "host_permissions": [
     "https://wplace.live/*",
-    "https://*.wplace.live/*"
+    "https://*.wplace.live/*",
+    "http://localhost:3000/*"
   ],
   "content_scripts": [
     {

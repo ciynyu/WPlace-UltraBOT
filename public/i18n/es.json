@@ -3,7 +3,8 @@
     "accounts": "Cuentas"
   },
   "pixel": {
-    "powerLabel": "Potencia de píxel: {count} / {max}"
+    "powerLabel": "Potencia de píxel: {count} / {max}",
+    "totalDroplets": "Droplets totales"
   },
   "ready": {
     "prepare": "Listo",
@@ -140,7 +141,7 @@
     "selectAccountFirst": "Selecciona una cuenta primero.",
     "maxPixelsReached": "Has alcanzado el máximo de píxeles: {limit}/{limit}",
     "addCfClearancePrompt": "Primero agrega el valor cf_clearance en Configuración (mín. 30 caracteres).",
-    "max12Accounts": "Puedes seleccionar hasta 12 cuentas.",
+    "max200Accounts": "Puedes seleccionar hasta 200 cuentas.",
     "startRequirementsMissing": "Para empezar ingresa el token, selecciona cuentas y al menos 1 píxel.",
     "noSelectedImage": "No hay imagen seleccionada.",
     "errorGeneric": "Error",

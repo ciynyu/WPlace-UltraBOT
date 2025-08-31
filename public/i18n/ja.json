@@ -3,7 +3,8 @@
     "accounts": "アカウント"
   },
   "pixel": {
-    "powerLabel": "ピクセルパワー: {count} / {max}"
+    "powerLabel": "ピクセルパワー: {count} / {max}",
+    "totalDroplets": "合計ドロップレット"
   },
   "ready": {
     "prepare": "準備",
@@ -71,13 +72,16 @@
     "maxSizeExceeded": "最大サイズは 1000x1000 ピクセルです。",
     "alphaThreshold": "透過",
     "colorMetric": "色アルゴリズム",
+    "colorConversion": "色変換",
     "metricRgb": "RGB (fast)",
     "metricLab": "Lab (CIE76)",
     "metricOklab": "Oklab",
     "metricCiede2000": "CIEDE2000 (more accurate, slower)",
     "dithering": "Dithering",
     "ditheringOn": "Dithering: ON",
-    "ditheringOff": "Dithering: OFF"
+    "ditheringOff": "Dithering: OFF",
+    "colorConversionOff": "色変換：オフ",
+    "colorConversionOn": "色変換：オン"
   },
   "settings": {
     "cf_clearance": "cf_clearance"
@@ -96,7 +100,8 @@
     "edit": "編集",
     "checkPixels": "確認",
     "shop": "ショップ",
-    "delete": "削除"
+    "delete": "削除",
+    "selectOverlay": "オーバーレイを選択"
   },
   "thumb": {
     "imageAlt": "画像 {n}",
@@ -140,7 +145,7 @@
     "selectAccountFirst": "先にアカウントを選択してください。",
     "maxPixelsReached": "最大ピクセル数に達しました: {limit}/{limit}",
     "addCfClearancePrompt": "まず設定で cf_clearance を追加してください（30文字以上）。",
-    "max12Accounts": "最大12アカウントまで選択できます。",
+    "max200Accounts": "最大200アカウントまで選択できます。",
     "startRequirementsMissing": "開始するにはトークンを入力し、アカウントを選択し、少なくとも1ピクセル選んでください。",
     "noSelectedImage": "選択された画像はありません。",
     "errorGeneric": "エラー",
@@ -161,6 +166,10 @@
     "saveTitle": "場所を保存",
     "nameLabel": "名前",
     "load": "読み込む"
+  },
+  "template": {
+    "xCoord": "X座標",
+    "yCoord": "Y座標"
   }
 }
 

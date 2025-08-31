@@ -3,7 +3,8 @@
     "accounts": "Hesaplar"
   },
   "pixel": {
-    "powerLabel": "Piksel gücü: {count} / {max}"
+    "powerLabel": "Piksel gücü: {count} / {max}",
+    "totalDroplets": "Toplam Damlacık"
   },
   "ready": {
     "prepare": "Hazırlan",
@@ -125,7 +126,7 @@
     "selectAccountFirst": "Önce hesap seçin.",
     "maxPixelsReached": "Maksimum piksel sayısına ulaştınız: {limit}/{limit}",
     
-    "max12Accounts": "En fazla 12 hesap seçebilirsiniz.",
+    "max200Accounts": "En fazla 200 hesap seçebilirsiniz.",
     "startRequirementsMissing": "Başlatmak için token girin, hesap seçin ve en az 1 piksel seçin.",
     "noSelectedImage": "Seçili resim yok.",
     "errorGeneric": "Hata",

@@ -3,7 +3,8 @@
     "accounts": "账户"
   },
   "pixel": {
-    "powerLabel": "点数：{count} / {max}"
+    "powerLabel": "点数：{count} / {max}",
+    "totalDroplets": "总 Droplets"
   },
   "ready": {
     "prepare": "准备",
@@ -71,13 +72,16 @@
     "maxSizeExceeded": "最大尺寸为 1000x1000 像素。",
     "alphaThreshold": "透明度",
     "colorMetric": "颜色算法",
+    "colorConversion": "颜色转换",
     "metricRgb": "RGB (fast)",
     "metricLab": "Lab (CIE76)",
     "metricOklab": "Oklab",
     "metricCiede2000": "CIEDE2000 (more accurate, slower)",
     "dithering": "Dithering",
     "ditheringOn": "Dithering: ON",
-    "ditheringOff": "Dithering: OFF"
+    "ditheringOff": "Dithering: OFF",
+    "colorConversionOff": "颜色转换：关",
+    "colorConversionOn": "颜色转换：开"
   },
   "settings": {
     "cf_clearance": "cf_clearance"
@@ -96,7 +100,8 @@
     "edit": "编辑",
     "checkPixels": "检查",
     "shop": "商店",
-    "delete": "删除"
+    "delete": "删除",
+    "selectOverlay": "选择叠加层"
   },
   "thumb": {
     "imageAlt": "图片 {n}",
@@ -140,7 +145,7 @@
     "selectAccountFirst": "请先选择账号。",
     "maxPixelsReached": "已达到最大像素数：{limit}/{limit}",
     "addCfClearancePrompt": "请先在设置中添加 cf_clearance（至少30个字符）。",
-    "max12Accounts": "最多可选择12个账号。",
+    "max200Accounts": "最多可选择200个账号。",
     "startRequirementsMissing": "开始前请输入令牌，选择账号并选择至少1个像素。",
     "noSelectedImage": "未选择图片。",
     "errorGeneric": "错误",
@@ -161,5 +166,9 @@
     "saveTitle": "保存位置",
     "nameLabel": "名称",
     "load": "加载"
+  },
+  "template": {
+    "xCoord": "X 坐标",
+    "yCoord": "Y 坐标"
   }
 }

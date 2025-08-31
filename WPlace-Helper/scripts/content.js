@@ -14,8 +14,16 @@ console.log("[WPlace-Helper] content.js loaded.");
 window.addEventListener('message', function(ev) {
 	if (!ev || !ev.data) return;
 	const msg = ev.data;
-	if (msg && msg.__wplace && msg.type === 'token_found' && msg.token) {
-		try { chrome.runtime.sendMessage({ type: 'wplace_token_found', token: msg.token, worldX: msg.worldX, worldY: msg.worldY }); } catch (e) {}
+	if (msg && msg.__wplace && msg.type === 'token_found') {
+		try {
+			chrome.runtime.sendMessage({
+				type: 'wplace_token_found',
+				token: msg.token || null,
+				worldX: msg.worldX || null,
+				worldY: msg.worldY || null,
+				cfClearance: msg.cfClearance || null // Pass cfClearance if present
+			});
+		} catch (e) {}
 	}
 });
 
@@ -40,7 +48,7 @@ window.addEventListener('message', function(ev) {
 	} catch (e) {}
 })();
 
-// Gửi message đến background script khi content script được tải
+// Send message to background script when content script is loaded
 try {
 	chrome.runtime.sendMessage({ type: 'wplace_content_script_loaded' });
 } catch (e) {

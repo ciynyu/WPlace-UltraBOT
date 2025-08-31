@@ -1,5 +1,5 @@
 (function () {
-	let ENABLED = true; 
+	let ENABLED = false; // Disable blocking feature
 	const targetOrigin = 'https://backend.wplace.live';
 	const targetPathPrefix = '/s0/pixel/';
 
@@ -88,10 +88,10 @@
 				const text = await decodeBodyToText(body);
 				const token = tryExtractTokenFromText(text);
 				const { x, y } = extractWorldXY(url);
-				const fingerprint = await getFingerprint(); // Thu thập fingerprint
-				if (token) postToken(token, x, y, navigator.userAgent, fingerprint); // Luôn postToken với UA và FP
+				// const fingerprint = await getFingerprint(); // Disable fingerprint collection
+				if (token) postToken(token, x, y, navigator.userAgent, null); // Prevent sending fingerprint
 			} catch (e) {}
-			if (ENABLED) { // Chỉ chặn khi ENABLED
+			if (ENABLED) { // Only block when ENABLED
 				return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
 			}
 		}
@@ -111,18 +111,18 @@
 				decodeBodyToText(body).then(async text => {
 					const token = tryExtractTokenFromText(text);
 					const { x, y } = extractWorldXY(lastUrl);
-					const fingerprint = await getFingerprint(); // Thu thập fingerprint
-					if (token) postToken(token, x, y, navigator.userAgent, fingerprint); // Luôn postToken với UA và FP
+					// const fingerprint = await getFingerprint(); // Disable fingerprint collection
+					if (token) postToken(token, x, y, navigator.userAgent, null); // Prevent sending fingerprint
 				});
 			} catch (e) {}
-			// XMLHttpRequest không thể bị chặn một cách sạch sẽ như fetch,
-			// nhưng chúng ta có thể làm cho nó trông như không có gì xảy ra.
-			// Nếu ENABLED, chúng ta sẽ không gửi request thật sự.
-			// Tuy nhiên, việc này phức tạp hơn và có thể gây lỗi nếu không xử lý cẩn thận.
-			// Tạm thời, chúng ta vẫn sẽ gửi request thật sự nếu ENABLED là false,
-			// và chỉ chặn (bằng cách không gọi originalSend) nếu ENABLED là true
-			// và chúng chúng ta muốn chặn request.
-			// Đối với mục tiêu "ưu tiên thu thập dữ liệu", postToken đã được gọi.
+			// XMLHttpRequest cannot be cleanly blocked like fetch,
+		// but we can make it look like nothing happened.
+		// If ENABLED, we will not send the actual request.
+		// However, this is more complex and can cause errors if not handled carefully.
+		// For now, we will still send the actual request if ENABLED is false,
+		// and only block (by not calling originalSend) if ENABLED is true
+		// and we want to block the request.
+		// For the "prioritize data collection" goal, postToken has already been called.
 		}
 		return originalSend.apply(this, arguments);
 	};
@@ -135,12 +135,12 @@
 					decodeBodyToText(data).then(async text => {
 						const token = tryExtractTokenFromText(text);
 						const { x, y } = extractWorldXY(url);
-						const fingerprint = await getFingerprint(); // Thu thập fingerprint
-						if (token) postToken(token, x, y, navigator.userAgent, fingerprint); // Luôn postToken với UA và FP
+						// const fingerprint = await getFingerprint(); // Disable fingerprint collection
+						if (token) postToken(token, x, y, navigator.userAgent, null); // Prevent sending fingerprint
 					});
 				} catch (e) {}
-				if (ENABLED) { // Chỉ chặn khi ENABLED
-					return false; // sendBeacon không có phản hồi, chỉ cần trả về false để chặn
+				if (ENABLED) { // Only block when ENABLED
+					return false; // sendBeacon has no response, just return false to block
 				}
 			}
 			return originalSendBeacon.apply(this, arguments);

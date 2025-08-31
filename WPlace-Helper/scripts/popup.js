@@ -4,8 +4,6 @@ document.addEventListener('DOMContentLoaded', function() {
   const statusDiv = document.getElementById('status');
   const cookieJ = document.getElementById('cookie-j');
   const copyJ = document.getElementById('copy-j');
-  const cookieCfClearance = document.getElementById('cookie-cf-clearance');
-  const copyCfClearance = document.getElementById('copy-cf-clearance');
   const worldXInput = document.getElementById('world-x');
   const worldYInput = document.getElementById('world-y');
   const copyWorldX = document.getElementById('copy-world-x');
@@ -18,9 +16,9 @@ document.addEventListener('DOMContentLoaded', function() {
   const toggleAntiDetectionWrap = document.getElementById('toggle-anti-detection-wrap');
   const toggleAntiDetectionLabel = document.getElementById('toggle-anti-detection-label');
 
-  // const quickAddInput = document.getElementById('quick-add-input'); // Bị loại bỏ vì dữ liệu j và cf_clearance giờ được lấy tự động từ cookies
+// const quickAddInput = document.getElementById('quick-add-input'); // Removed because j and cf_clearance data is now automatically retrieved from cookies
   const quickAddButton = document.getElementById('quick-add-button');
-  const quickAddNameInput = document.getElementById('quick-add-name-input'); // Được giữ lại để cho phép người dùng nhập tên tài khoản thủ công
+  const quickAddNameInput = document.getElementById('quick-add-name-input'); // Retained to allow users to manually enter account names
 
   function setStatus(text) {
     if (!statusDiv) return;
@@ -28,38 +26,53 @@ document.addEventListener('DOMContentLoaded', function() {
     if (text) setTimeout(() => { if (statusDiv) statusDiv.textContent = ''; }, 2000);
   }
 
-  chrome.storage.local.get(['wplace_token', 'wplace_world_x', 'wplace_world_y'], function(result) {
+  chrome.storage.local.get(['wplace_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance'], function(result) {
     if (!tokenInput) return;
     if (result && result.wplace_token) {
       tokenInput.value = result.wplace_token;
     }
     if (worldXInput) worldXInput.value = (result && result.wplace_world_x) ? result.wplace_world_x : '-';
     if (worldYInput) worldYInput.value = (result && result.wplace_world_y) ? result.wplace_world_y : '-';
+    // Display captured cf_clearance
+    if (quickAddCfClearanceInput) quickAddCfClearanceInput.value = (result && result.wplace_cf_clearance) ? result.wplace_cf_clearance : '';
   });
 
   chrome.storage.local.get(['wplace_enabled', 'enableAntiDetection'], function(result) {
-    const captureEnabled = result && typeof result.wplace_enabled === 'boolean' ? result.wplace_enabled : true;
+    let captureEnabled = result && typeof result.wplace_enabled === 'boolean' ? result.wplace_enabled : true;
+    // If wplace_enabled is not in storage, default to true and save it to storage
+    if (result === undefined || typeof result.wplace_enabled === 'undefined') {
+        chrome.storage.local.set({ wplace_enabled: true });
+        captureEnabled = true; // Ensure local variable is also updated
+    }
     if (toggleCapture) toggleCapture.checked = captureEnabled;
     if (toggleWrap) toggleWrap.setAttribute('data-checked', String(!!captureEnabled));
     if (toggleLabel) toggleLabel.textContent = captureEnabled ? 'On' : 'Off';
 
-    const antiDetectionEnabled = result && typeof result.enableAntiDetection === 'boolean' ? result.enableAntiDetection : false;
+    const antiDetectionEnabled = false; // Always set to false to disable anti-detection feature
+  //const antiDetectionEnabled = result && typeof result.enableAntiDetection === 'boolean' ? result.enableAntiDetection : false;
     if (toggleAntiDetection) toggleAntiDetection.checked = antiDetectionEnabled;
     if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(!!antiDetectionEnabled));
-    if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = antiDetectionEnabled ? 'On' : 'Off';
+    if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off'; // Always show as Off
+  //if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = antiDetectionEnabled ? 'On' : 'Off';
   });
 
   chrome.storage.onChanged.addListener(function(changes, area) {
     if (!tokenInput) return;
-    if (area === 'local' && changes && changes.wplace_token) {
-      tokenInput.value = changes.wplace_token.newValue || 'No token captured yet...';
-    }
-    if (area === 'local' && (changes.wplace_world_x || changes.wplace_world_y)) {
-      if (worldXInput && changes.wplace_world_x) {
-        worldXInput.value = changes.wplace_world_x.newValue || '-';
+    if (area === 'local' && changes) {
+      if (changes.wplace_token) {
+        tokenInput.value = changes.wplace_token.newValue || 'No token captured yet...';
       }
-      if (worldYInput && changes.wplace_world_y) {
-        worldYInput.value = changes.wplace_world_y.newValue || '-';
+      if (changes.wplace_world_x) {
+        if (worldXInput) worldXInput.value = changes.wplace_world_x.newValue || '-';
+      }
+      if (changes.wplace_world_y) {
+        if (worldYInput) worldYInput.value = changes.wplace_world_y.newValue || '-';
+      }
+      if (changes.wplace_cf_clearance) {
+        if (quickAddCfClearanceInput) quickAddCfClearanceInput.value = changes.wplace_cf_clearance.newValue || '';
+        if (changes.wplace_cf_clearance.newValue) {
+          setStatus('CF_Clearance captured!'); // Show notification when cf_clearance changes
+        }
       }
     }
   });
@@ -75,10 +88,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (toggleAntiDetection) {
     toggleAntiDetection.addEventListener('change', function() {
-      const enabled = !!toggleAntiDetection.checked;
+      // Prevent user from enabling anti-detection feature
+      toggleAntiDetection.checked = false;
+      if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(false));
+      if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off';
+      chrome.storage.local.set({ enableAntiDetection: false });
+/*      const enabled = !!toggleAntiDetection.checked;
       if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(enabled));
       if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = enabled ? 'On' : 'Off';
-      chrome.storage.local.set({ enableAntiDetection: enabled });
+      chrome.storage.local.set({ enableAntiDetection: enabled }); */
     });
   }
 
@@ -122,17 +140,13 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function loadCookies() {
-    if (!cookieJ || !cookieCfClearance) return;
-    chrome.cookies.getAll({ domain: 'wplace.live' }, function(cookies) {
+    if (!cookieJ) return;
+    chrome.cookies.getAll({ domain: 'wplace.live', name: 'j' }, function(cookies) {
       try {
         const jCookie = (cookies || []).find(c => c && c.name === 'j');
         cookieJ.value = jCookie && jCookie.value ? jCookie.value : 'Not found';
-
-        const cfCookie = (cookies || []).find(c => c && c.name === 'cf_clearance');
-        cookieCfClearance.value = cfCookie && cfCookie.value ? cfCookie.value : 'Not found';
       } catch (e) {
         cookieJ.value = 'Not found';
-        cookieCfClearance.value = 'Not found';
       }
     });
   }
@@ -144,66 +158,60 @@ document.addEventListener('DOMContentLoaded', function() {
       if (cookieJ.value && cookieJ.value !== 'Not found') {
         navigator.clipboard.writeText(cookieJ.value).then(function() {
           setStatus('Account token copied!');
-          loadCookies(); // Cập nhật lại UI sau khi copy (để hiển thị Not found nếu token bị xóa)
+          loadCookies(); // Update UI after copying (to show Not found if token is deleted)
         });
       }
     });
   }
 
-  if (copyCfClearance) {
-    copyCfClearance.addEventListener('click', function() {
-      if (!cookieCfClearance) return;
-      if (cookieCfClearance.value && cookieCfClearance.value !== 'Not found') {
-        navigator.clipboard.writeText(cookieCfClearance.value).then(function() {
-          setStatus('Cloudflare token copied!');
-          loadCookies(); // Cập nhật lại UI sau khi copy
-        });
+
+  const quickAddCfClearanceInput = document.getElementById('quick-add-cf-clearance-input');
+  const pasteCfClearanceButton = document.getElementById('paste-cf-clearance-button');
+  if (pasteCfClearanceButton) {
+    pasteCfClearanceButton.addEventListener('click', async function() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (quickAddCfClearanceInput) {
+          quickAddCfClearanceInput.value = text.trim();
+          setStatus('Pasted.');
+        }
+      } catch (err) {
+        setStatus('Clipboard read failed: ' + err.message);
       }
     });
   }
 
   if (quickAddButton) {
     quickAddButton.addEventListener('click', async function() {
-      // const inputText = quickAddInput.value.trim(); // Bị loại bỏ vì dữ liệu j và cf_clearance giờ được lấy tự động từ cookies
-      // const accountName = quickAddNameInput.value.trim(); // Dòng này được di chuyển xuống dưới để lấy giá trị sau khi có thể đã có existingAccount
       let jToken = '';
       let cfClearance = '';
 
-      // Extract j and cf_clearance from input text - Phần này bị loại bỏ vì dữ liệu j và cf_clearance giờ được lấy tự động từ cookies
-      /*
-      const jMatch = inputText.match(/\bj=([^;]+)/);
-      if (jMatch) {
-        jToken = jMatch[1];
-      }
-      const cfMatch = inputText.match(/cf_clearance=([^;]+)/);
-      if (cfMatch) {
-        cfClearance = cfMatch[1];
-      }
-      */
-
-      // Tự động lấy j và cf_clearance từ cookies
-      const cookies = await new Promise(resolve => {
-        chrome.cookies.getAll({ domain: 'wplace.live' }, function(cks) {
-          resolve(cks);
+      // Automatically retrieve jToken from cookies
+      const jCookie = await new Promise(resolve => {
+        chrome.cookies.getAll({ domain: 'wplace.live', name: 'j' }, function(cks) {
+          resolve(cks && cks[0] ? cks[0] : null);
         });
       });
-
-      const jCookie = (cookies || []).find(c => c && c.name === 'j');
       if (jCookie) {
         jToken = jCookie.value;
       }
-
-      const cfCookie = (cookies || []).find(c => c && c.name === 'cf_clearance');
-      if (cfCookie) {
-        cfClearance = cfCookie.value;
+      
+      // Get cfClearance from input box
+      if (quickAddCfClearanceInput) {
+          cfClearance = quickAddCfClearanceInput.value.trim();
+      }
+      // Prioritize captured cf_clearance if available and valid
+      const storedCfClearance = (await chrome.storage.local.get('wplace_cf_clearance')).wplace_cf_clearance;
+      if (storedCfClearance && storedCfClearance.length >= 30) {
+          cfClearance = storedCfClearance;
       }
 
-      if (!jToken && !cfClearance) {
-        setStatus('Không tìm thấy token "j" hoặc "cf_clearance" trong cookies. Vui lòng đăng nhập vào wplace.live.');
+      if (!jToken) {
+        setStatus('J token not found. Login or enter manually.');
         return;
       }
       if (!cfClearance || cfClearance.length < 30) {
-        setStatus('cf_clearance is required (min 30 chars).');
+        setStatus('cf_clearance required (min 30 chars).');
         return;
       }
       
@@ -211,45 +219,48 @@ document.addEventListener('DOMContentLoaded', function() {
         const accounts = await fetch('http://localhost:3000/api/accounts').then(res => res.json());
         let existingAccount = null;
 
-        // Check if account with same jToken or cfClearance already exists
+        // Check if account with same jToken exists
         if (jToken) {
           existingAccount = accounts.find(acc => acc.token === jToken);
         }
-        if (!existingAccount && cfClearance) {
+        if (!existingAccount && cfClearance) { // Check based on cfClearance if jToken does not match
           existingAccount = accounts.find(acc => acc.cf_clearance === cfClearance);
         }
 
         let method = 'POST';
         let url = 'http://localhost:3000/api/accounts';
-        let body = { 
+        let body = {
           token: jToken,
           cf_clearance: cfClearance,
           userAgent: navigator.userAgent || null
         };
-        // Lấy tên từ quick-add-name-input, nếu có
+        // Get name from quick-add-name-input, if available
         const accountNameInput = document.getElementById('quick-add-name-input');
         let accountName = accountNameInput ? accountNameInput.value.trim() : '';
 
-        // Logic xử lý tên tài khoản
+        // Account name handling logic
         if (existingAccount) {
           method = 'PUT';
-          url = `http://localhost:3000/api/accounts/${existingAccount.id}`;
-          // Nếu có tên mới nhập vào, sử dụng tên đó. Nếu không, giữ nguyên tên cũ của tài khoản.
+          url = `http://localhost:3000/api/accounts/${existingAccount.id}`; // Changed to localhost:3000
+          // If a new name is entered, use it. Otherwise, keep the account's old name.
           body.name = accountName || existingAccount.name;
-          if (!jToken) {
-            body.token = existingAccount.token;
+          // If jToken is provided, update it. Otherwise, use existing.
+          body.token = jToken || existingAccount.token;
+          // Ensure cf_clearance is updated if existingAccount does not have cf_clearance or a new cf_clearance is different
+          // or if it was captured automatically
+          if (cfClearance) { // Only update if cfClearance is provided and valid
+            body.cf_clearance = cfClearance;
+          } else if (existingAccount.cf_clearance) { // Keep existing if no new one provided
+            body.cf_clearance = existingAccount.cf_clearance;
           }
         } else {
-          // Nếu là tạo mới tài khoản
+          // If creating a new account
           if (accountName) {
-            // Nếu có tên nhập vào, sử dụng tên đó
+            // If a name is entered, use it
             body.name = accountName;
           } else {
-            // Nếu không có tên nhập vào, cần lấy username.
-            // HIỆN TẠI TÔI KHÔNG THỂ XÁC ĐỊNH CÁCH "BLUE MARBLE" LẤY USERNAME.
-            // Tạm thời sử dụng tên mặc định dựa trên token.
-            // Nếu bạn muốn lấy username tự động, vui lòng hướng dẫn cách lấy username từ API hoặc cookie.
-            body.name = jToken ? `j_${jToken.substring(0, 8)}` : `cf_${cfClearance.substring(0, 8)}`; // Tên mặc định
+            // If no name is entered, but jToken is available, use jToken based name
+            body.name = jToken ? `j_${jToken.substring(0, 8)}` : `cf_${cfClearance.substring(0, 8)}`; // Default name
           }
         }
 
@@ -262,18 +273,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const data = await response.json();
         if (response.ok) {
-          setStatus('Tài khoản đã được lưu thành công!');
-          // Xóa nội dung input sau khi lưu thành công (nếu có)
+          // If the account name was not provided manually and the backend returned a name, use it
+          if (!accountName && data.name) {
+            // Update the body.name to reflect the name provided by the backend.
+            // This is important because the backend might assign a name if it was initially empty.
+            // This `body.name` isn't directly used for display here, but conceptual consistency.
+            body.name = data.name;
+          }
+          setStatus('Account saved!');
+          // Clear input content after successful save (if any)
           const accountNameInput = document.getElementById('quick-add-name-input');
           if (accountNameInput) {
-            accountNameInput.value = ''; // Xóa tên đã nhập sau khi lưu
+            accountNameInput.value = ''; // Clear entered name after saving
           }
+          // Clear cf_clearance input after successful save
+          if (quickAddCfClearanceInput) {
+              quickAddCfClearanceInput.value = '';
+          }
+          chrome.storage.local.remove('wplace_cf_clearance'); // Clear stored cf_clearance as it's saved
           // chrome.runtime.sendMessage({ type: 'refresh_main_app_accounts' });
         } else {
-          setStatus(`Error: ${data.error || 'Something went wrong.'}`);
+          setStatus(`Error: ${data.error || 'Unknown error.'}`);
         }
       } catch (error) {
-        setStatus(`Network Error: ${error.message}`);
+        setStatus(`Network error: ${error.message}`);
       }
     });
   }

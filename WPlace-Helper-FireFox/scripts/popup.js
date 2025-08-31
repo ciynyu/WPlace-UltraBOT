@@ -2,7 +2,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const tokenInput = document.getElementById('token-input');
   const copyButton = document.getElementById('copy-button');
   const statusDiv = document.getElementById('status');
-  const cookieList = document.getElementById('cookie-list');
+  const cookieJ = document.getElementById('cookie-j');
+  const copyJ = document.getElementById('copy-j');
   const worldXInput = document.getElementById('world-x');
   const worldYInput = document.getElementById('world-y');
   const copyWorldX = document.getElementById('copy-world-x');
@@ -10,23 +11,21 @@ document.addEventListener('DOMContentLoaded', function() {
   const toggleCapture = document.getElementById('toggle-capture');
   const toggleWrap = document.getElementById('toggle-capture-wrap');
   const toggleLabel = document.getElementById('toggle-capture-label');
-
-  const cfTokenInput = document.getElementById('cf-token-input');
-  const cfCopyRefreshButton = document.getElementById('cf-copy-refresh-button');
-
+ 
   const toggleAntiDetection = document.getElementById('toggle-anti-detection');
   const toggleAntiDetectionWrap = document.getElementById('toggle-anti-detection-wrap');
   const toggleAntiDetectionLabel = document.getElementById('toggle-anti-detection-label');
-
-  let activeCfCookie = null;
-  let activeCfTabId = null;
-
+ 
+// const quickAddInput = document.getElementById('quick-add-input'); // Removed because j and cf_clearance data is now automatically retrieved from cookies
+  const quickAddButton = document.getElementById('quick-add-button');
+  const quickAddNameInput = document.getElementById('quick-add-name-input'); // Retained to allow users to manually enter account names
+ 
   function setStatus(text) {
     if (!statusDiv) return;
     statusDiv.textContent = text || '';
     if (text) setTimeout(() => { if (statusDiv) statusDiv.textContent = ''; }, 2000);
   }
-
+ 
   chrome.storage.local.get(['wplace_token', 'wplace_world_x', 'wplace_world_y'], function(result) {
     if (!tokenInput) return;
     if (result && result.wplace_token) {
@@ -35,19 +34,26 @@ document.addEventListener('DOMContentLoaded', function() {
     if (worldXInput) worldXInput.value = (result && result.wplace_world_x) ? result.wplace_world_x : '-';
     if (worldYInput) worldYInput.value = (result && result.wplace_world_y) ? result.wplace_world_y : '-';
   });
-
+ 
   chrome.storage.local.get(['wplace_enabled', 'enableAntiDetection'], function(result) {
-    const captureEnabled = result && typeof result.wplace_enabled === 'boolean' ? result.wplace_enabled : true;
+    let captureEnabled = result && typeof result.wplace_enabled === 'boolean' ? result.wplace_enabled : true;
+    // If wplace_enabled is not in storage, default to true and save it to storage
+    if (result === undefined || typeof result.wplace_enabled === 'undefined') {
+        chrome.storage.local.set({ wplace_enabled: true });
+        captureEnabled = true; // Ensure local variable is also updated
+    }
     if (toggleCapture) toggleCapture.checked = captureEnabled;
     if (toggleWrap) toggleWrap.setAttribute('data-checked', String(!!captureEnabled));
     if (toggleLabel) toggleLabel.textContent = captureEnabled ? 'On' : 'Off';
-
-    const antiDetectionEnabled = result && typeof result.enableAntiDetection === 'boolean' ? result.enableAntiDetection : false;
+ 
+    const antiDetectionEnabled = false; // Always set to false to disable anti-detection feature
+  //const antiDetectionEnabled = result && typeof result.enableAntiDetection === 'boolean' ? result.enableAntiDetection : false;
     if (toggleAntiDetection) toggleAntiDetection.checked = antiDetectionEnabled;
     if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(!!antiDetectionEnabled));
-    if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = antiDetectionEnabled ? 'On' : 'Off';
+    if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off'; // Always show as Off
+  //if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = antiDetectionEnabled ? 'On' : 'Off';
   });
-
+ 
   chrome.storage.onChanged.addListener(function(changes, area) {
     if (!tokenInput) return;
     if (area === 'local' && changes && changes.wplace_token) {
@@ -62,7 +68,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   });
-
+ 
   if (toggleCapture) {
     toggleCapture.addEventListener('change', function() {
       const enabled = !!toggleCapture.checked;
@@ -71,16 +77,21 @@ document.addEventListener('DOMContentLoaded', function() {
       chrome.storage.local.set({ wplace_enabled: enabled });
     });
   }
-
+ 
   if (toggleAntiDetection) {
     toggleAntiDetection.addEventListener('change', function() {
-      const enabled = !!toggleAntiDetection.checked;
+      // Prevent user from enabling anti-detection feature
+      toggleAntiDetection.checked = false;
+      if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(false));
+      if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off';
+      chrome.storage.local.set({ enableAntiDetection: false });
+/*      const enabled = !!toggleAntiDetection.checked;
       if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(enabled));
       if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = enabled ? 'On' : 'Off';
-      chrome.storage.local.set({ enableAntiDetection: enabled });
+      chrome.storage.local.set({ enableAntiDetection: enabled }); */
     });
   }
-
+ 
   if (copyButton) {
     copyButton.addEventListener('click', function() {
       if (!tokenInput) return;
@@ -93,9 +104,9 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-
+ 
   function valOrDash(v) { return (v && String(v).trim()) ? String(v).trim() : '-'; }
-
+ 
   if (copyWorldX) {
     copyWorldX.addEventListener('click', function() {
       const xVal = worldXInput ? worldXInput.value : '';
@@ -107,7 +118,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-
+ 
   if (copyWorldY) {
     copyWorldY.addEventListener('click', function() {
       const yVal = worldYInput ? worldYInput.value : '';
@@ -119,121 +130,152 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-
-  async function loadCfClearanceCookie() {
-    if (!cfTokenInput || !cfCopyRefreshButton) return;
-    
-    activeCfCookie = null;
-    activeCfTabId = null;
-    cfCopyRefreshButton.disabled = true;
-    cfTokenInput.value = "Searching...";
-
-    const tabs = await chrome.tabs.query({ url: ["*://wplace.live/*", "*://*.wplace.live/*"] });
-
-    if (tabs.length === 0) {
-      cfTokenInput.value = "Open a wplace.live tab first";
-      return;
-    }
-    
-    for (const tab of tabs) {
+ 
+  function loadCookies() {
+    if (!cookieJ) return;
+    chrome.cookies.getAll({ domain: 'wplace.live', name: 'j' }, function(cookies) {
       try {
-        const foundCookies = await chrome.cookies.getAll({
-          name: 'cf_clearance',
-          domain: 'wplace.live',
-          storeId: tab.cookieStoreId,
-          partitionKey: {
-            topLevelSite: "https://wplace.live"
-          }
-        });
-        
-        if (foundCookies.length > 0) {
-          const cookie = foundCookies[0];
-          cfTokenInput.value = cookie.value;
-          cfCopyRefreshButton.disabled = false;
-          activeCfCookie = { ...cookie, storeId: tab.cookieStoreId };
-          activeCfTabId = tab.id;
-          return;
-        }
+        const jCookie = (cookies || []).find(c => c && c.name === 'j');
+        cookieJ.value = jCookie && jCookie.value ? jCookie.value : 'Not found';
       } catch (e) {
-        console.error(`Error checking cookies for tab ${tab.id}:`, e);
+        cookieJ.value = 'Not found';
       }
-    }
-    
-    cfTokenInput.value = "Not found in any tab";
-  }
-
-  if (cfCopyRefreshButton) {
-    cfCopyRefreshButton.addEventListener('click', async function() {
-      if (!activeCfCookie || !activeCfTabId) return;
-
-      cfCopyRefreshButton.disabled = true;
-      await navigator.clipboard.writeText(activeCfCookie.value);
-      setStatus('Cloudflare token copied!');
-      
-      const cookieUrl = `https://${activeCfCookie.domain.startsWith('.') ? activeCfCookie.domain.substring(1) : activeCfCookie.domain}${activeCfCookie.path}`;
-      
-      await chrome.cookies.remove({
-        url: cookieUrl,
-        name: 'cf_clearance',
-        storeId: activeCfCookie.storeId,
-        partitionKey: {
-          topLevelSite: "https://wplace.live"
-        }
-      });
-
-      cfTokenInput.value = "Refreshing tab for new token...";
-      chrome.tabs.reload(activeCfTabId);
-
-      activeCfCookie = null;
-      activeCfTabId = null;
-      setTimeout(loadCfClearanceCookie, 3000);
     });
   }
-
-  async function loadAllAccountCookies() {
-    if (!cookieList) return;
-    cookieList.innerHTML = '';
-    try {
-      if (!chrome.contextualIdentities) {
-        cookieList.innerHTML = `<p style="font-size: 12px; color: var(--muted); margin: 4px 0;">This feature requires Firefox.</p>`;
-        return;
-      }
-      const identities = await chrome.contextualIdentities.query({});
-      const identityMap = new Map(identities.map(id => [id.cookieStoreId, id]));
-      const storeIdsToCheck = identities.map(id => id.cookieStoreId);
-      storeIdsToCheck.push("firefox-default");
-      const cookiePromises = storeIdsToCheck.map(async (storeId) => {
-        const foundCookies = await chrome.cookies.getAll({
-          domain: 'backend.wplace.live', name: 'j', storeId: storeId
+  loadCookies();
+ 
+  if (copyJ) {
+    copyJ.addEventListener('click', function() {
+      if (!cookieJ) return;
+      if (cookieJ.value && cookieJ.value !== 'Not found') {
+        navigator.clipboard.writeText(cookieJ.value).then(function() {
+          setStatus('Account token copied!');
+          loadCookies(); // Update UI after copying (to show Not found if token is deleted)
         });
-        return foundCookies.map(cookie => ({ ...cookie, cookieStoreId: storeId }));
-      });
-      const results = await Promise.all(cookiePromises);
-      const cookies = results.flat();
-      if (cookies.length === 0) {
-        cookieList.innerHTML = `<p style="font-size: 12px; color: var(--muted); margin: 4px 0;">No account tokens found.</p>`;
-        return;
       }
-      cookies.forEach(cookie => {
-        const identity = identityMap.get(cookie.cookieStoreId);
-        const containerName = identity ? identity.name : 'Default';
-        const item = document.createElement('div');
-        item.className = 'cookie-item';
-        const cookieValue = cookie.value;
-        item.innerHTML = `<div class="cookie-info"><span class="container-badge" title="${containerName}">${containerName}</span><input type="text" readonly value="${cookieValue}"></div><button class="btn btn-icon" title="Copy ${containerName} token"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M9 8.5A2.5 2.5 0 0 1 11.5 6h5A2.5 2.5 0 0 1 19 8.5v8A2.5 2.5 0 0 1 16.5 19h-5A2.5 2.5 0 0 1 9 16.5v-8Z" stroke="currentColor" stroke-width="1.5"/><path d="M7.5 16.5A2.5 2.5 0 0 1 5 14V7.5A2.5 2.5 0 0 1 7.5 5H14" stroke="currentColor" stroke-width="1.5"/></svg><span>Copy</span></button>`;
-        item.querySelector('button').addEventListener('click', () => {
-          navigator.clipboard.writeText(cookieValue).then(() => {
-            setStatus(`Token for '${containerName}' copied!`);
-          });
-        });
-        cookieList.appendChild(item);
-      });
-    } catch (e) {
-      console.error("Error loading cookies:", e);
-      cookieList.innerHTML = `<p style="font-size: 12px; color: var(--muted); margin: 4px 0;">Error loading account tokens. Check console.</p>`;
-    }
+    });
   }
-
-  loadCfClearanceCookie();
-  loadAllAccountCookies();
+ 
+ 
+  const quickAddCfClearanceInput = document.getElementById('quick-add-cf-clearance-input');
+  const pasteCfClearanceButton = document.getElementById('paste-cf-clearance-button');
+  if (pasteCfClearanceButton) {
+    pasteCfClearanceButton.addEventListener('click', async function() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (quickAddCfClearanceInput) {
+          quickAddCfClearanceInput.value = text.trim();
+          setStatus('Pasted.');
+        }
+      } catch (err) {
+        setStatus('Clipboard read failed: ' + err.message);
+      }
+    });
+  }
+ 
+  if (quickAddButton) {
+    quickAddButton.addEventListener('click', async function() {
+      let jToken = '';
+      let cfClearance = '';
+ 
+      // Automatically retrieve jToken from cookies
+      const jCookie = await new Promise(resolve => {
+        chrome.cookies.getAll({ domain: 'wplace.live', name: 'j' }, function(cks) {
+          resolve(cks && cks[0] ? cks[0] : null);
+        });
+      });
+      if (jCookie) {
+        jToken = jCookie.value;
+      }
+      
+      // Get cfClearance from input box
+      if (quickAddCfClearanceInput) {
+          cfClearance = quickAddCfClearanceInput.value.trim();
+      }
+ 
+      if (!jToken) {
+        setStatus('J token not found. Login or enter manually.');
+        return;
+      }
+      if (!cfClearance || cfClearance.length < 30) {
+        setStatus('cf_clearance required (min 30 chars).');
+        return;
+      }
+      
+      try {
+        const accounts = await fetch('http://localhost:3000/api/accounts').then(res => res.json());
+        let existingAccount = null;
+ 
+        // Check if account with same jToken exists
+        if (jToken) {
+          existingAccount = accounts.find(acc => acc.token === jToken);
+        }
+        if (!existingAccount && cfClearance) { // Check based on cfClearance if jToken does not match
+          existingAccount = accounts.find(acc => acc.cf_clearance === cfClearance);
+        }
+ 
+        let method = 'POST';
+        let url = 'http://localhost:3000/api/accounts';
+        let body = {
+          token: jToken,
+          cf_clearance: cfClearance,
+          userAgent: navigator.userAgent || null
+        };
+        // Get name from quick-add-name-input, if available
+        const accountNameInput = document.getElementById('quick-add-name-input');
+        let accountName = accountNameInput ? accountNameInput.value.trim() : '';
+ 
+        // Account name handling logic
+        if (existingAccount) {
+          method = 'PUT';
+          url = `http://3000/api/accounts/${existingAccount.id}`;
+          // If a new name is entered, use it. Otherwise, keep the account's old name.
+          body.name = accountName || existingAccount.name;
+          if (!jToken) {
+            body.token = existingAccount.token;
+          }
+          // Ensure cf_clearance is updated if existingAccount does not have cf_clearance or a new cf_clearance is different
+          if (!existingAccount.cf_clearance || existingAccount.cf_clearance !== cfClearance) {
+            body.cf_clearance = cfClearance;
+          }
+        } else {
+          // If creating a new account
+          if (accountName) {
+            // If a name is entered, use it
+            body.name = accountName;
+          } else {
+            // If no name is entered, username is needed.
+            // Temporarily use a default name based on the token.
+            body.name = jToken ? `j_${jToken.substring(0, 8)}` : `cf_${cfClearance.substring(0, 8)}`; // Default name
+          }
+        }
+ 
+ 
+        const response = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+ 
+        const data = await response.json();
+        if (response.ok) {
+          // If the account name was not provided manually and meta.name is available from the backend response, use it
+          if (!accountName && data.name) { // Assuming 'name' field in backend response is the desired meta.name
+            body.name = data.name; // Use name from backend response
+          }
+          setStatus('Account saved!');
+          // Clear input content after successful save (if any)
+          const accountNameInput = document.getElementById('quick-add-name-input');
+          if (accountNameInput) {
+            accountNameInput.value = ''; // Clear entered name after saving
+          }
+          // chrome.runtime.sendMessage({ type: 'refresh_main_app_accounts' });
+        } else {
+          setStatus(`Error: ${data.error || 'Unknown error.'}`);
+        }
+      } catch (error) {
+        setStatus(`Network error: ${error.message}`);
+      }
+    });
+  }
 });

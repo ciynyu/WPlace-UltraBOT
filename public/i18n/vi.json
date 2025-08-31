@@ -3,7 +3,8 @@
     "accounts": "Tài khoản"
   },
   "pixel": {
-    "powerLabel": "Năng lượng pixel: {count} / {max}"
+    "powerLabel": "Năng lượng pixel: {count} / {max}",
+    "totalDroplets": "Tổng số Droplets"
   },
   "ready": {
     "prepare": "Sẵn sàng",
@@ -71,16 +72,20 @@
     "maxSizeExceeded": "Kích thước tối đa là 1000x1000 pixels.",
     "alphaThreshold": "Độ trong suốt",
     "colorMetric": "Thuật toán màu",
+    "colorConversion": "Chuyển đổi màu",
     "metricRgb": "RGB (nhanh)",
     "metricLab": "Lab (CIE76)",
     "metricOklab": "Oklab",
     "metricCiede2000": "CIEDE2000 (chính xác hơn, chậm hơn)",
     "dithering": "Làm mịn màu",
-    "ditheringOn": "Làm mịn màu: BẬT",
-    "ditheringOff": "Làm mịn màu: TẮT"
+    "ditheringOn": "bật",
+    "ditheringOff": "tắt",
+    "colorConversionOff": "tắt",
+    "colorConversionOn": "bật"
   },
   "settings": {
-    "cf_clearance": "cf_clearance"
+    "cf_clearance": "cf_clearance",
+    "updateIntervalMinutes": "Khoảng thời gian cập nhật (phút)"
   },
   "mosaic": {
     "title": "Tranh ghép",
@@ -96,7 +101,8 @@
     "edit": "Sửa",
     "checkPixels": "Kiểm tra",
     "shop": "Cửa hàng",
-    "delete": "Xóa"
+    "delete": "Xóa",
+    "selectOverlay": "Chọn Lớp Phủ"
   },
   "thumb": {
     "imageAlt": "Ảnh {n}",
@@ -128,7 +134,7 @@
     "selectAccountFirst": "Vui lòng chọn tài khoản trước.",
     "maxPixelsReached": "Bạn đã đạt số lượng pixel tối đa: {limit}/{limit}",
     "addCfClearancePrompt": "Vui lòng thêm giá trị cf_clearance trong Cài đặt (tối thiểu 30 ký tự).",
-    "max12Accounts": "Bạn có thể chọn tối đa 12 tài khoản.",
+    "max200Accounts": "Bạn có thể chọn tối đa 200 tài khoản.",
     "startRequirementsMissing": "Nhập token, chọn tài khoản và chọn ít nhất 1 pixel để bắt đầu.",
     "noSelectedImage": "Chưa có ảnh nào được chọn.",
     "errorGeneric": "Lỗi",
@@ -165,5 +171,9 @@
     "saveTitle": "Lưu vị trí",
     "nameLabel": "Tên",
     "load": "Tải"
+  },
+  "template": {
+    "xCoord": "Tọa độ X",
+    "yCoord": "Tọa độ Y"
   }
 }

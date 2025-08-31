@@ -9,12 +9,15 @@
   "permissions": [
     "storage",
     "cookies",
-	"contextualIdentities",
+    "alarms",
+    "clipboardRead",
+ "contextualIdentities",
     "tabs"
   ],
   "host_permissions": [
     "https://wplace.live/*",
-    "https://*.wplace.live/*"
+    "https://*.wplace.live/*",
+    "http://localhost:3000/*"
   ],
   "content_scripts": [
     {

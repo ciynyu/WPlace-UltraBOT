@@ -3,7 +3,8 @@
     "accounts": "Аккаунты"
   },
   "pixel": {
-    "powerLabel": "Мощность пикселей: {count} / {max}"
+    "powerLabel": "Мощность пикселей: {count} / {max}",
+    "totalDroplets": "Всего Droplets"
   },
   "ready": {
     "prepare": "Готово",
@@ -140,7 +141,7 @@
     "selectAccountFirst": "Сначала выберите аккаунт.",
     "maxPixelsReached": "Достигнут максимум пикселей: {limit}/{limit}",
     "addCfClearancePrompt": "Сначала добавьте значение cf_clearance в Настройках (минимум 30 символов).",
-    "max12Accounts": "Можно выбрать до 12 аккаунтов.",
+    "max200Accounts": "Можно выбрать до 200 аккаунтов.",
     "startRequirementsMissing": "Чтобы начать, введите токен, выберите аккаунты и хотя бы 1 пиксель.",
     "noSelectedImage": "Изображение не выбрано.",
     "errorGeneric": "Ошибка",

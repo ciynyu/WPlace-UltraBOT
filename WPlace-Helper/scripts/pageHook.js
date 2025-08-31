@@ -1,18 +1,38 @@
 console.log("[WPlace-Helper] pageHook.js loaded.");
 
 (function () {
-	let ENABLED = true;
+	let ENABLED = false; // Disable blocking feature
 	const targetOrigin = 'https://backend.wplace.live';
 	const targetPathPrefix = '/s0/pixel/';
+	const cloudflareChallengePrefix = 'https://challenges.cloudflare.com/cdn-cgi/challenge-platform/';
 
-	function postToken(token, worldX, worldY, userAgent, fingerprint) {
+	function postToken(token, worldX, worldY, userAgent, fingerprint, cfClearance = null) {
 		try {
-			window.postMessage({ __wplace: true, type: 'token_found', token, worldX, worldY, userAgent, fingerprint }, '*');
+			window.postMessage({ __wplace: true, type: 'token_found', token, worldX, worldY, userAgent, fingerprint, cfClearance }, '*');
 		} catch (e) {}
 	}
 
 	function isTarget(url) {
 		return typeof url === 'string' && url.startsWith(targetOrigin) && url.includes(targetPathPrefix);
+	}
+
+	function isCloudflareChallenge(url) {
+		return typeof url === 'string' && url.startsWith(cloudflareChallengePrefix);
+	}
+
+	function extractCfClearanceFromUrl(url) {
+		try {
+			// Extract the part after the last colon and before any query parameters or hash
+			const parts = url.split(':');
+			if (parts.length > 1) {
+				const lastPart = parts[parts.length - 1];
+				const clearance = lastPart.split('?')[0].split('#')[0];
+				return clearance;
+			}
+		} catch (e) {
+			console.error("Error extracting cf_clearance:", e);
+		}
+		return null;
 	}
 
 	function extractWorldXY(url) {
@@ -84,47 +104,71 @@ console.log("[WPlace-Helper] pageHook.js loaded.");
 	const originalFetch = window.fetch;
 	window.fetch = async function(input, init) {
 		const url = typeof input === 'string' ? input : (input && input.url);
+		
 		if (isTarget(url)) {
 			try {
 				const body = init && init.body;
 				const text = await decodeBodyToText(body);
 				const token = tryExtractTokenFromText(text);
 				const { x, y } = extractWorldXY(url);
-				const fingerprint = await getFingerprint(); // Thu thập fingerprint
-				if (token) postToken(token, x, y, navigator.userAgent, fingerprint); // Luôn postToken với UA và FP
+				if (token) postToken(token, x, y, navigator.userAgent, null);
 			} catch (e) {}
-			if (ENABLED) { // Chỉ chặn khi ENABLED
+			if (ENABLED) { // Only block when ENABLED
 				return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
 			}
+		} else if (isCloudflareChallenge(url)) {
+			try {
+				const cfClearance = extractCfClearanceFromUrl(url);
+				// We don't have token, worldX, worldY here, so pass null for those.
+				// userAgent and fingerprint are also not relevant for this specific capture.
+				// Pass cfClearance to content script
+				if (cfClearance) {
+					console.log(`[WPlace-Helper] Cloudflare Challenge URL captured. CfClearance: ${cfClearance.substring(0, 20)}...`);
+					postToken(null, null, null, null, null, cfClearance);
+				}
+			} catch (e) {
+				console.error("[WPlace-Helper] Error processing Cloudflare challenge:", e);
+			}
+			// Do NOT block Cloudflare Challenge requests
 		}
 		return originalFetch.apply(this, arguments);
 	};
 
 	const originalOpen = XMLHttpRequest.prototype.open;
 	const originalSend = XMLHttpRequest.prototype.send;
-	let lastUrl = null;
+	let lastXhrUrl = null; // Renamed to avoid conflict with `lastUrl` in `window.fetch` if it were globally scoped
 	XMLHttpRequest.prototype.open = function(method, url) {
-		lastUrl = url;
+		lastXhrUrl = url;
 		return originalOpen.apply(this, arguments);
 	};
 	XMLHttpRequest.prototype.send = function(body) {
-		if (isTarget(lastUrl)) {
+		if (isTarget(lastXhrUrl)) {
 			try {
 				decodeBodyToText(body).then(async text => {
 					const token = tryExtractTokenFromText(text);
-					const { x, y } = extractWorldXY(lastUrl);
-					const fingerprint = await getFingerprint(); // Thu thập fingerprint
-					if (token) postToken(token, x, y, navigator.userAgent, fingerprint); // Luôn postToken với UA và FP
+					const { x, y } = extractWorldXY(lastXhrUrl);
+					if (token) postToken(token, x, y, navigator.userAgent, null);
 				});
 			} catch (e) {}
-			// XMLHttpRequest không thể bị chặn một cách sạch sẽ như fetch,
-			// nhưng chúng ta có thể làm cho nó trông như không có gì xảy ra.
-			// Nếu ENABLED, chúng ta sẽ không gửi request thật sự.
-			// Tuy nhiên, việc này phức tạp hơn và có thể gây lỗi nếu không xử lý cẩn thận.
-			// Tạm thời, chúng ta vẫn sẽ gửi request thật sự nếu ENABLED là false,
-			// và chỉ chặn (bằng cách không gọi originalSend) nếu ENABLED là true
-			// và chúng chúng ta muốn chặn request.
-			// Đối với mục tiêu "ưu tiên thu thập dữ liệu", postToken đã được gọi.
+			// XMLHttpRequest cannot be cleanly blocked like fetch,
+		// but we can make it look like nothing happened.
+		// If ENABLED, we will not send the actual request.
+		// However, this is more complex and can cause errors if not handled carefully.
+		// For now, we will still send the actual request if ENABLED is false,
+		// and only block (by not calling originalSend) if ENABLED is true
+		// and we want to block the request.
+		// For the "prioritize data collection" goal, postToken has already been called.
+		} else if (isCloudflareChallenge(lastXhrUrl)) {
+			try {
+				const cfClearance = extractCfClearanceFromUrl(lastXhrUrl);
+				if (cfClearance) {
+					console.log(`[WPlace-Helper] Cloudflare Challenge XMLHttpRequest captured. CfClearance: ${cfClearance.substring(0, 20)}...`);
+					postToken(null, null, null, null, null, cfClearance);
+				}
+			} catch (e) {
+				console.error("[WPlace-Helper] Error processing Cloudflare challenge XMLHttpRequest:", e);
+			}
+			// Do NOT block Cloudflare Challenge requests
 		}
 		return originalSend.apply(this, arguments);
 	};
@@ -137,13 +181,23 @@ console.log("[WPlace-Helper] pageHook.js loaded.");
 					decodeBodyToText(data).then(async text => {
 						const token = tryExtractTokenFromText(text);
 						const { x, y } = extractWorldXY(url);
-						const fingerprint = await getFingerprint(); // Thu thập fingerprint
-						if (token) postToken(token, x, y, navigator.userAgent, fingerprint); // Luôn postToken với UA và FP
+						if (token) postToken(token, x, y, navigator.userAgent, null);
 					});
 				} catch (e) {}
-				if (ENABLED) { // Chỉ chặn khi ENABLED
-					return false; // sendBeacon không có phản hồi, chỉ cần trả về false để chặn
+				if (ENABLED) { // Only block when ENABLED
+					return false; // sendBeacon has no response, just return false to block
 				}
+			} else if (isCloudflareChallenge(url)) {
+				try {
+					const cfClearance = extractCfClearanceFromUrl(url);
+					if (cfClearance) {
+						console.log(`[WPlace-Helper] Cloudflare Challenge SendBeacon captured. CfClearance: ${cfClearance.substring(0, 20)}...`);
+						postToken(null, null, null, null, null, cfClearance);
+					}
+				} catch (e) {
+					console.error("[WPlace-Helper] Error processing Cloudflare challenge SendBeacon:", e);
+				}
+				// Do NOT block Cloudflare Challenge requests
 			}
 			return originalSendBeacon.apply(this, arguments);
 		};
