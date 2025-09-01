@@ -1,7 +1,7 @@
 console.log("[WPlace-Helper] pageHook.js loaded.");
 
 (function () {
-	let ENABLED = false; // Disable blocking feature
+	let ENABLED = true; // Enable blocking feature by default
 	const targetOrigin = 'https://backend.wplace.live';
 	const targetPathPrefix = '/s0/pixel/';
 	const cloudflareChallengePrefix = 'https://challenges.cloudflare.com/cdn-cgi/challenge-platform/';

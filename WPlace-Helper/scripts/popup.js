@@ -12,9 +12,13 @@ document.addEventListener('DOMContentLoaded', function() {
   const toggleWrap = document.getElementById('toggle-capture-wrap');
   const toggleLabel = document.getElementById('toggle-capture-label');
 
-  const toggleAntiDetection = document.getElementById('toggle-anti-detection');
-  const toggleAntiDetectionWrap = document.getElementById('toggle-anti-detection-wrap');
-  const toggleAntiDetectionLabel = document.getElementById('toggle-anti-detection-label');
+  // const toggleAntiDetection = document.getElementById('toggle-anti-detection');
+  // const toggleAntiDetectionWrap = document.getElementById('toggle-anti-detection-wrap');
+  // const toggleAntiDetectionLabel = document.getElementById('toggle-anti-detection-label');
+  
+  const toggleSeassonCfClearance = document.getElementById('toggle-seasson-cf-clearance');
+  const toggleSeassonCfClearanceWrap = document.getElementById('toggle-seasson-cf-clearance-wrap');
+  const toggleSeassonCfClearanceLabel = document.getElementById('toggle-seasson-cf-clearance-label');
 
 // const quickAddInput = document.getElementById('quick-add-input'); // Removed because j and cf_clearance data is now automatically retrieved from cookies
   const quickAddButton = document.getElementById('quick-add-button');
@@ -48,17 +52,24 @@ document.addEventListener('DOMContentLoaded', function() {
     if (toggleWrap) toggleWrap.setAttribute('data-checked', String(!!captureEnabled));
     if (toggleLabel) toggleLabel.textContent = captureEnabled ? 'On' : 'Off';
 
-    const antiDetectionEnabled = false; // Always set to false to disable anti-detection feature
-  //const antiDetectionEnabled = result && typeof result.enableAntiDetection === 'boolean' ? result.enableAntiDetection : false;
-    if (toggleAntiDetection) toggleAntiDetection.checked = antiDetectionEnabled;
-    if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(!!antiDetectionEnabled));
-    if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off'; // Always show as Off
-  //if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = antiDetectionEnabled ? 'On' : 'Off';
+    // const antiDetectionEnabled = false; // Always set to false to disable anti-detection feature
+    const antiDetectionEnabled = result && typeof result.enableAntiDetection === 'boolean' ? result.enableAntiDetection : false;
+    // if (toggleAntiDetection) toggleAntiDetection.checked = antiDetectionEnabled;
+    // if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(!!antiDetectionEnabled));
+    // if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off'; // Always show as Off
+    // if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = antiDetectionEnabled ? 'On' : 'Off';
+  });
+ 
+  chrome.storage.local.get(['seasson_cf_clearance_enabled'], function(result) {
+    const seassonCfClearanceEnabled = false; // Always set to false to disable this feature for now
+    if (toggleSeassonCfClearance) toggleSeassonCfClearance.checked = seassonCfClearanceEnabled;
+    if (toggleSeassonCfClearanceWrap) toggleSeassonCfClearanceWrap.setAttribute('data-checked', String(seassonCfClearanceEnabled));
+    if (toggleSeassonCfClearanceLabel) toggleSeassonCfClearanceLabel.textContent = 'Off';
   });
 
-  chrome.storage.onChanged.addListener(function(changes, area) {
-    if (!tokenInput) return;
-    if (area === 'local' && changes) {
+   chrome.storage.onChanged.addListener(function(changes, area) {
+     if (!tokenInput) return;
+     if (area === 'local' && changes) {
       if (changes.wplace_token) {
         tokenInput.value = changes.wplace_token.newValue || 'No token captured yet...';
       }
@@ -86,19 +97,30 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  if (toggleAntiDetection) {
-    toggleAntiDetection.addEventListener('change', function() {
-      // Prevent user from enabling anti-detection feature
-      toggleAntiDetection.checked = false;
-      if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(false));
-      if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off';
-      chrome.storage.local.set({ enableAntiDetection: false });
-/*      const enabled = !!toggleAntiDetection.checked;
-      if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(enabled));
-      if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = enabled ? 'On' : 'Off';
-      chrome.storage.local.set({ enableAntiDetection: enabled }); */
-    });
-  }
+
+  // if (toggleAntiDetection) {
+  //   toggleAntiDetection.addEventListener('change', function() {
+  //     // Prevent user from enabling anti-detection feature
+  //     toggleAntiDetection.checked = false;
+  //     if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(false));
+  //     if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off';
+  //     chrome.storage.local.set({ enableAntiDetection: false });
+  // /*      const enabled = !!toggleAntiDetection.checked;
+  //     if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(enabled));
+  //     if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = enabled ? 'On' : 'Off';
+  //     chrome.storage.local.set({ enableAntiDetection: enabled }); */
+  //   });
+  // }
+
+ if (toggleSeassonCfClearance) {
+   toggleSeassonCfClearance.addEventListener('change', function() {
+     // Prevent user from enabling this feature
+     toggleSeassonCfClearance.checked = false;
+     if (toggleSeassonCfClearanceWrap) toggleSeassonCfClearanceWrap.setAttribute('data-checked', String(false));
+     if (toggleSeassonCfClearanceLabel) toggleSeassonCfClearanceLabel.textContent = 'Off';
+     chrome.storage.local.set({ seasson_cf_clearance_enabled: false });
+   });
+ }
 
   if (copyButton) {
     copyButton.addEventListener('click', function() {
@@ -200,9 +222,9 @@ document.addEventListener('DOMContentLoaded', function() {
       if (quickAddCfClearanceInput) {
           cfClearance = quickAddCfClearanceInput.value.trim();
       }
-      // Prioritize captured cf_clearance if available and valid
+      // Prioritize manually entered cf_clearance. If not available, use stored.
       const storedCfClearance = (await chrome.storage.local.get('wplace_cf_clearance')).wplace_cf_clearance;
-      if (storedCfClearance && storedCfClearance.length >= 30) {
+      if (!cfClearance && storedCfClearance && storedCfClearance.length >= 30) {
           cfClearance = storedCfClearance;
       }
 
@@ -223,8 +245,20 @@ document.addEventListener('DOMContentLoaded', function() {
         if (jToken) {
           existingAccount = accounts.find(acc => acc.token === jToken);
         }
-        if (!existingAccount && cfClearance) { // Check based on cfClearance if jToken does not match
-          existingAccount = accounts.find(acc => acc.cf_clearance === cfClearance);
+        if (!existingAccount && cfClearance) { // Check based on cf_clearance if jToken does not match
+          // Only search for existing accounts by cf_clearance if the cf_clearance is NOT from quickAddCfClearanceInput.value
+          // This prevents overwriting an existing account if the user pastes an old cf_clearance.
+          // The assumption is that quickAddCfClearanceInput.value is for adding a *new* cf_clearance,
+          // or if it's the current one, it will be handled by the jToken match.
+          // This logic needs to be revisited if quickAddCfClearanceInput.value is intended for updating existing accounts by cf_clearance.
+          // For now, prioritize matching by jToken, and if that fails,
+          // only consider storedCfClearance for matching if it was *captured* and not manually entered.
+          // To be safe, if a cfClearance is provided via quickAddCfClearanceInput, we always treat it as a potential new entry or update,
+          // and let the backend handle the merge/update logic.
+          // For now, we remove the existingAccount lookup by cfClearance for quickAdd,
+          // as it can cause unintended overwrites if an old cf_clearance is pasted.
+          // The backend should manage cf_clearance uniqueness and updates for existing accounts.
+          //existingAccount = accounts.find(acc => acc.cf_clearance === cfClearance);
         }
 
         let method = 'POST';

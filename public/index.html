@@ -4254,7 +4254,7 @@ async function reloadCurrentBackground() {
           const url = buildUrl(area, no) + '?t=' + Date.now();
           const image = new Image();
           image.onload = () => {
-            // clearColorCaches(); // Xóa cache màu sắc khi tải lại ảnh nền
+            //clearColorCaches(); // Xóa cache màu sắc khi tải lại ảnh nền
             const prevOrigin = getCurrentOriginTile();
             const prevW = currentTileW || (img ? (img.width|0) : 0);
             const prevH = currentTileH || (img ? (img.height|0) : 0);
@@ -4498,15 +4498,21 @@ function loadImage(area, no, preserveView = false) {
       }
 
       if (isDrawingOverlay) {
-          // Clamp world coordinates to image bounds
-          const clampedWorldX = Math.min(img.width * 2, Math.max(-img.width, worldX));
-          const clampedWorldY = Math.min(img.height * 2, Math.max(-img.height, worldY));
-
-          overlayStartX = clampedWorldX;
-          overlayStartY = clampedWorldY;
+          if (!img) { // Need a base image to draw on
+              showToast(t('messages.noImageToDrawOn'), 'error', 2000);
+              // Exit drawing mode if no image to draw on
+              isDrawingOverlay = false;
+              isDraggingOverlay = false;
+              canvas.style.cursor = '';
+              rangeOverlay.hidden = true;
+              return;
+          }
+          isDraggingOverlay = true; // Start dragging for overlay
+          overlayStartX = worldX;
+          overlayStartY = worldY;
           rangeOverlay.hidden = false;
           
-          // Initial position on screen, converted from clamped world coordinates
+          // Initial position on screen, converted from world coordinates
           const initialScreenPos = worldToScreen(overlayStartX, overlayStartY);
           rangeOverlay.style.left = initialScreenPos.x + 'px';
           rangeOverlay.style.top = initialScreenPos.y + 'px';
@@ -4642,30 +4648,25 @@ function loadImage(area, no, preserveView = false) {
     });
     canvas.addEventListener('contextmenu', (e) => { if (isReadyOpen()) { e.preventDefault(); } });
     window.addEventListener('mousemove', (e) => {
-      if (isDrawingOverlay) {
+      if (isDraggingOverlay) { // Only update if actively dragging for overlay
           const rect = canvas.getBoundingClientRect();
           const px = e.clientX - rect.left;
           const py = e.clientY - rect.top;
           const worldX = (px - state.translateX) / state.scale;
           const worldY = (py - state.translateY) / state.scale;
 
-          // Clamp world coordinates to image bounds
-          const clampedWorldX = Math.min(img.width * 2, Math.max(-img.width, worldX));
-          const clampedWorldY = Math.min(img.height * 2, Math.max(-img.height, worldY));
-
-          const x = Math.min(overlayStartX, clampedWorldX);
-          const y = Math.min(overlayStartY, clampedWorldY);
-          const w = Math.abs(clampedWorldX - overlayStartX);
-          const h = Math.abs(clampedWorldY - overlayStartY);
-
+          const x = Math.min(overlayStartX, worldX);
+          const y = Math.min(overlayStartY, worldY);
+          const w = Math.abs(worldX - overlayStartX);
+          const h = Math.abs(worldY - overlayStartY);
+ 
           const p = worldToScreen(x, y);
           rangeOverlay.style.left = p.x + 'px';
           rangeOverlay.style.top = p.y + 'px';
           rangeOverlay.style.width = (w * state.scale) + 'px';
           rangeOverlay.style.height = (h * state.scale) + 'px';
           
-          // Ensure the overlay is visible during dragging
-          rangeOverlay.hidden = false;
+          rangeOverlay.hidden = false; // Ensure the overlay is visible during dragging
           return;
       }
       if (isReadyOpen()) {
@@ -4850,10 +4851,10 @@ function loadImage(area, no, preserveView = false) {
     });
 */
     window.addEventListener('mouseup', (e) => {
-      if (isDrawingOverlay) {
-          isDrawingOverlay = false;
-          canvas.style.cursor = '';
-          rangeOverlay.hidden = true;
+      if (isDraggingOverlay) {
+          isDraggingOverlay = false; // Stop dragging
+          canvas.style.cursor = ''; // Reset cursor
+          rangeOverlay.hidden = true; // Hide the active drawing overlay
 
           const rect = canvas.getBoundingClientRect();
           const px = e.clientX - rect.left;
@@ -4861,17 +4862,13 @@ function loadImage(area, no, preserveView = false) {
           const worldX = (px - state.translateX) / state.scale;
           const worldY = (py - state.translateY) / state.scale;
 
-          // Clamp final world coordinates to image bounds
-          const clampedWorldX = Math.min(img.width * 2, Math.max(-img.width, worldX));
-          const clampedWorldY = Math.min(img.height * 2, Math.max(-img.height, worldY));
-
-          const x = Math.min(overlayStartX, clampedWorldX);
-          const y = Math.min(overlayStartY, clampedWorldY);
-          const w = Math.abs(clampedWorldX - overlayStartX);
-          const h = Math.abs(clampedWorldY - overlayStartY);
+          const x = Math.min(overlayStartX, worldX);
+          const y = Math.min(overlayStartY, worldY);
+          const w = Math.abs(worldX - overlayStartX);
+          const h = Math.abs(worldY - overlayStartY);
 
           if (w > 0 && h > 0) {
-              const overlayName = prompt("Enter a name for the overlay:", `Overlay ${savedOverlays.length + 1}`);
+              const overlayName = prompt(t('messages.enterOverlayName'), `Overlay ${savedOverlays.length + 1}`);
               if (overlayName !== null) {
                   const newOverlay = {
                       id: Date.now(), // Unique ID for the overlay
@@ -4895,6 +4892,7 @@ function loadImage(area, no, preserveView = false) {
                   captureOverlayImageData(newOverlay);
               }
           }
+          isDrawingOverlay = false; // Exit drawing mode after completion
           return;
       }
       if (resizingItem) {
@@ -6973,7 +6971,8 @@ function loadImage(area, no, preserveView = false) {
     const dimOverlay = document.getElementById('dim-overlay'); /* Lấy phần tử dim-overlay */
     const dimCtx = dimOverlay ? dimOverlay.getContext('2d') : null; /* Lấy context của dim-overlay */
 
-    let isDrawingOverlay = false;
+    let isDrawingOverlay = false; // Controls if drawing mode is active (set by button click)
+    let isDraggingOverlay = false; // Controls if a drag operation for overlay is in progress
     let overlayStartX = 0, overlayStartY = 0;
     let savedOverlays = [];
     let selectedOverlayIndex = -1;
@@ -7222,12 +7221,21 @@ function loadImage(area, no, preserveView = false) {
 
     if (btnAddOverlay) {
         btnAddOverlay.addEventListener('click', () => {
-            isDrawingOverlay = true;
-            canvas.style.cursor = 'crosshair';
-            if(readyPopup) readyPopup.hidden = true; // Hide popup to draw
-            selectedOverlayIndex = -1; // Deselect any old overlay
-            rangeOverlay.hidden = true; // Hide the old range overlay
-            rangeOverlay.classList.remove('saved-overlay'); // Remove saved style
+            if (isDrawingOverlay) { // If already in drawing mode, cancel it
+                isDrawingOverlay = false;
+                isDraggingOverlay = false;
+                canvas.style.cursor = '';
+                rangeOverlay.hidden = true;
+                showToast(t('messages.overlayDrawingCancelled'), 'info', 1500);
+            } else { // Enter drawing mode (waiting for drag)
+                isDrawingOverlay = true; // Enable drawing mode
+                canvas.style.cursor = 'crosshair';
+                if(readyPopup) readyPopup.hidden = true; // Hide popup to draw
+                selectedOverlayIndex = -1; // Deselect any old overlay
+                rangeOverlay.hidden = true; // Hide the old range overlay
+                rangeOverlay.classList.remove('saved-overlay'); // Remove saved style
+                showToast(t('messages.dragToDrawOverlay'), 'info', 2000);
+            }
         });
     }
 
@@ -8555,6 +8563,11 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
       try { localStorage.removeItem('palette.selectedColorId'); } catch {}
       selectedOverrideColorId = null;
       try { updatePaletteSelectionUi(); } catch {}
+      // Ensure overlay drawing mode is off when palette changes or is loaded/reset
+      isDrawingOverlay = false;
+      isDraggingOverlay = false;
+      canvas.style.cursor = '';
+      rangeOverlay.hidden = true;
     }
 
     function getItemPixelPaletteId(item, sx, sy){
