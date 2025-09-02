@@ -152,7 +152,7 @@
     .pixel-marker[hidden] { display: none; }
     #selection-overlay { position: fixed; left: 0; top: 0; z-index: 700; pointer-events: none; image-rendering: pixelated; }
     body.dragging-sign #sign { cursor: grabbing; }
-    /* CSS cho range-overlay */
+    /* CSS for range-overlay */
    #range-overlay {
        position: absolute;
        border: 2px dashed #22d3ee; /* Màu xanh neon */
@@ -906,7 +906,7 @@
   <div id="pixel-selected-list" hidden></div>
   <div id="range-overlay" hidden></div>
   <div id="top-toolbar">
-    <div id="total-droplets-info" class="app-btn modal-right-info" style="position:static; margin-right:auto; margin-left: 0; pointer-events: none;" >💧 Tổng Droplets: -</div>
+    <div id="total-droplets-info" class="app-btn modal-right-info" style="position:static; margin-right:auto; margin-left: 0; pointer-events: none;" data-i18n-dynamic="droplets.totalLabel" data-count="0">💧 Tổng Droplets: -</div>
   <div id="sound-control">
     <button id="sound-toggle" class="app-btn" type="button" title="" aria-label="">🔊</button>
     <div class="sound-slider" role="group" aria-label="Ses ayarı">
@@ -1193,7 +1193,7 @@
               <input id="img-width" type="number" min="1" max="1000" step="1" />
               <label for="img-height" data-i18n="preview.height">Yükseklik</label>
               <input id="img-height" type="number" min="1" max="1000" step="1" />
-              <!-- img-template-x và img-template-y được di chuyển và giảm kích thước -->
+              <!-- img-template-x and img-template-y moved and resized -->
               <label for="img-template-x" data-i18n="template.xCoord">X:</label>
               <input id="img-template-x" type="number" step="1" value="0" style="width: 80px;" />
               <label for="img-template-y" data-i18n="template.yCoord">Y:</label>
@@ -1250,7 +1250,7 @@
 
     <button class="app-btn" type="submit" data-i18n="form.fetchButton">Getir</button>
     <button class="app-btn" type="button" id="btn-upload-sign" data-i18n="form.uploadImage">Resim yükle</button>
-    <!-- Nút "Upload Template" bị ẩn theo yêu cầu -->
+    <!-- "Upload Template" button is hidden as requested -->
     <button class="app-btn" type="button" id="btn-upload-template" hidden>Upload Template</button>
   </form>
   <!-- Input file for template is hidden and disabled as requested -->
@@ -1508,8 +1508,8 @@
         const totalDropletsEl = document.getElementById('total-droplets-info');
         if (totalDropletsEl) {
             const total = calculateTotalDroplets();
-            totalDropletsEl.textContent = `💧 Tổng Droplets: ${total}`;
-            totalDropletsEl.hidden = false; // Luôn hiển thị khi đã tính toán
+            totalDropletsEl.textContent = t('droplets.totalLabel', { count: total });
+            totalDropletsEl.hidden = false; // Always display when calculated
         }
     }
     
@@ -1746,7 +1746,7 @@
     const selectionOverlay = document.getElementById('selection-overlay');
     const selectionCtx = selectionOverlay ? selectionOverlay.getContext('2d', { willReadFrequently: true }) : null;
     const eraserButton = document.getElementById('eraser-button');
-    let isEraserMode = false;
+    let isEraserMode; // Sẽ được tính toán động dựa trên selectedOverrideColorId
     function resizeSelectionOverlay(){
       try {
         if (!selectionOverlay) return;
@@ -2487,7 +2487,7 @@
     // Composite color at world coords considering overlays when present
     function getCompositeColorAtWorld(wx, wy){
       const key = String(Math.round(wx)) + ',' + String(Math.round(wy));
-      // Kiểm tra cache trước
+      // Check cache first
       // if (COMPOSITE_COLOR_CACHE.has(key)) {
       //     return COMPOSITE_COLOR_CACHE.get(key);
       // }
@@ -2543,7 +2543,7 @@
       ITEM_PIXEL_PALETTE_ID_CACHE.set(key, paletteId);
       return paletteId;
     }
-    // Lấy màu từ canvas hoặc từ hình ảnh sign nếu canvas trong suốt tại đó
+    // Get color from canvas or from the sign image if the canvas is transparent there
     function getColorAtWorld(wx, wy) {
         // Lấy màu từ canvas chính
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -3210,7 +3210,8 @@
               });
               readyGlobalSelected.clear();
             } catch {}
-            try { resetReadyNow(); } catch {}
+            // Bỏ dòng resetReadyNow() để không tự thoát ready popup
+            // try { resetReadyNow(); } catch {}
           }
         } catch {
           selectedOverrideColorId = null;
@@ -8078,6 +8079,7 @@ const autoStartTrack = document.getElementById('auto-start-toggle');
       } catch {}
     }
     function updateEraserButtonUi() {
+        isEraserMode = (selectedOverrideColorId === -1); // Tính toán isEraserMode động
         if (eraserButton) {
             eraserButton.classList.toggle('active', isEraserMode);
         }

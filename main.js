@@ -4,12 +4,18 @@ const http = require('http');
 const https = require('https');
 const zlib = require('zlib');
 const url = require('url');
+
+const PROXY_FILE = path.resolve(process.cwd(), 'proxies.txt');
+let activeProxies = []; // Stores the loaded proxies
+let useProxy = false; // Flag to enable/disable proxy usage based on proxies.txt content
+
 /*
 const { Worker } = require('worker_threads');
 */
 let axios; try { axios = require('axios'); } catch (e) { axios = null; }
 let puppeteer; try { puppeteer = require('puppeteer-extra'); } catch (e) { puppeteer = null; } // Use puppeteer-extra
 let stealth; try { stealth = require('puppeteer-extra-plugin-stealth'); } catch (e) { stealth = null; } // Add stealth plugin
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const UserAgent = require('user-agents'); // Import user-agents
 const { FingerprintGenerator } = require('fingerprint-generator'); // Import fingerprint-generator
@@ -78,6 +84,35 @@ function debugLog(type, ...args) {
   }
 }
 module.exports.debugLog = debugLog; // Export debugLog
+
+// Proxy management functions
+function loadProxies() {
+  activeProxies = [];
+  useProxy = false;
+  try {
+    if (!fs.existsSync(PROXY_FILE)) {
+      debugLog('INFO', `${PROXY_FILE} not found. Creating empty file.`);
+      fs.writeFileSync(PROXY_FILE, '', 'utf8');
+    }
+    const data = fs.readFileSync(PROXY_FILE, 'utf8');
+    const proxies = data.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    if (proxies.length > 0) {
+      activeProxies = proxies;
+      useProxy = true;
+      debugLog('INFO', `Loaded ${activeProxies.length} proxies from ${PROXY_FILE}`);
+    } else {
+      debugLog('INFO', `No proxies found in ${PROXY_FILE}. Proxy usage disabled.`);
+    }
+  } catch (e) {
+    debugLog('ERROR', `Failed to load/create proxies from ${PROXY_FILE}: ${e.message}`);
+  }
+}
+
+function getRandomProxy() {
+  if (activeProxies.length === 0) return null;
+  const randomIndex = Math.floor(Math.random() * activeProxies.length);
+  return activeProxies[randomIndex];
+}
 
 // Function to generate random and synchronized User-Agent and Fingerprint
 function generateAntiDetectionParams() {
@@ -162,7 +197,11 @@ function maskCookieHeader(cookieHeader) {
 const HTTPS_AGENT = new https.Agent({ secureProtocol: 'TLSv1_2_method' });
 let axiosClient = null;
 if (axios) {
-  axiosClient = axios.create({ httpsAgent: HTTPS_AGENT, timeout: 15000, validateStatus: () => true });
+  axiosClient = axios.create({
+    httpsAgent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT,
+    timeout: 15000,
+    validateStatus: () => true
+  });
   axiosClient.interceptors.request.use((config) => {
     try {
       const headers = { ...(config.headers || {}) };
@@ -378,7 +417,7 @@ async function requestMeLikePython(opts) {
     },
     decompress: false,
     timeout: { request: 30000 },
-    agent: { https: HTTPS_AGENT }
+    agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT }
   };
   debugLog('OUTBOUND', 'HTTP GET begin', {
     host: 'backend.wplace.live',
@@ -543,7 +582,14 @@ async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', 
     }));
   }
 
-  const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      ...(useProxy && getRandomProxy() ? [`--proxy-server=${getRandomProxy()}`] : [])
+    ]
+  });
   try {
     const page = await browser.newPage();
     await page.setUserAgent(currentAccountUserAgent); // Set User-Agent
@@ -660,7 +706,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
         body: payload,
         throwHttpErrors: false,
         decompress: true,
-        agent: { https: HTTPS_AGENT },
+        agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
         timeout: { request: 30000 }
       });
       const status = r && (r.statusCode || r.status) || 0;
@@ -688,7 +734,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
           'Content-Type': 'application/json',
           'Cookie': `cf_clearance=${cf_clearance || ''}; j=${token || ''}`
         },
-        agent: HTTPS_AGENT
+        agent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT
       };
       const req = https.request(options, (resp) => {
         let buf = '';
@@ -762,7 +808,7 @@ function startServer(port, host) {
       const no = m && m[2] ? m[2] : '';
       const remoteUrl = `https://backend.wplace.live/files/s0/tiles/${encodeURIComponent(area)}/${encodeURIComponent(no)}.png`;
       try {
-        https.get(remoteUrl, { agent: HTTPS_AGENT, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/png,image/*;q=0.8,*/*;q=0.5' } }, (r) => {
+        https.get(remoteUrl, { agent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/png,image/*;q=0.8,*/*;q=0.5' } }, (r) => {
           const status = r.statusCode || 0;
           if (status !== 200) {
             try { r.resume(); } catch {}
@@ -996,7 +1042,7 @@ function startServer(port, host) {
                 body: payload,
                 throwHttpErrors: false,
                 decompress: true,
-                agent: { https: HTTPS_AGENT },
+                agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
                 timeout: { request: 30000 }
               });
               const status = r && (r.statusCode || r.status) || 0;
@@ -1015,7 +1061,7 @@ function startServer(port, host) {
             port: 443,
             path: remotePath,
             method: 'POST',
-            agent: HTTPS_AGENT,
+            agent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT,
             headers: {
               'User-Agent': currentAccountUserAgent, // Use userAgent from the account
               'Accept': '*/*',
@@ -1160,7 +1206,7 @@ function startServer(port, host) {
                 body: payload,
                 throwHttpErrors: false,
                 decompress: true,
-                agent: { https: HTTPS_AGENT },
+                agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
                 timeout: { request: 30000 }
               });
               const status = r && (r.statusCode || r.status) || 0;
@@ -1192,7 +1238,7 @@ function startServer(port, host) {
             port: 443,
             path: remotePath,
             method: 'POST',
-            agent: HTTPS_AGENT,
+            agent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT,
             headers: {
               'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
               'Accept': 'application/json, text/plain, */*',
@@ -1654,6 +1700,17 @@ function main() {
  
   startServer(port, host);
   startAccountRefreshScheduler(); // Start the scheduler once when the application starts
+
+  // Load proxies initially
+  loadProxies();
+
+  // Watch for changes in proxies.txt
+  fs.watch(PROXY_FILE, (eventType, filename) => {
+    if (eventType === 'change') {
+      debugLog('INFO', `${PROXY_FILE} changed, reloading proxies...`);
+      loadProxies();
+    }
+  });
 }
 
 let refreshSchedulerInterval = null;

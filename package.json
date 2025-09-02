@@ -24,6 +24,7 @@
     "axios": "^1.7.7",
     "fingerprint-generator": "^2.1.70",
     "got-scraping": "^4.1.2",
+    "https-proxy-agent": "^7.0.6",
     "pngjs": "^7.0.0",
     "puppeteer": "^22.15.0",
     "puppeteer-extra": "^3.3.6",

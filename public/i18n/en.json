@@ -3,8 +3,10 @@
     "accounts": "Accounts"
   },
   "pixel": {
-    "powerLabel": "Pixel power: {count} / {max}",
-    "totalDroplets": "Total Droplets"
+    "powerLabel": "Pixel power: {count} / {max}"
+  },
+  "droplets": {
+    "totalLabel": "Total Droplets: {count}"
   },
   "ready": {
     "prepare": "Ready",

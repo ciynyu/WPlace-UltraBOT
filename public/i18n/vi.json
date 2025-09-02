@@ -3,8 +3,10 @@
     "accounts": "Tài khoản"
   },
   "pixel": {
-    "powerLabel": "Năng lượng pixel: {count} / {max}",
-    "totalDroplets": "Tổng số Droplets"
+    "powerLabel": "Năng lượng pixel: {count} / {max}"
+  },
+  "droplets": {
+    "totalLabel": "Tổng Droplets: {count}"
   },
   "ready": {
     "prepare": "Sẵn sàng",
