@@ -2347,27 +2347,27 @@
     function isPixelSelected(item, x, y){
       const map = getSelectedMap(item); if (!map) return false; return map.has(keyFor(x,y));
     }
-    function addPixelSelection(item, x, y, colorIdOverride = null){
-      const map = getSelectedMap(item); if (!map) return false;
-      const k = keyFor(x,y); if (map.has(k)) return false;
-      let effectiveColorId = colorIdOverride;
-      if (effectiveColorId == null) {
-        try { effectiveColorId = getItemPixelPaletteId(item, x, y); } catch {}
-      }
-      if (effectiveColorId != null && effectiveColorId !== 0 && isPremiumColorId(effectiveColorId)){
-        const hasSelectedAccounts = Array.isArray(readySelectedAccountIds) && readySelectedAccountIds.length > 0;
-        if (!hasSelectedAccounts) { try { showToast(t('messages.selectAccountFirst'), 'error', 2000); } catch {} return false; }
-        const remain = getPremiumColorRemainingLimit(effectiveColorId);
-        if (!(remain > 0)) { try { showToast(t('messages.premiumColorLimitReached'), 'error', 2000); } catch {} return false; }
-      }
-      // Store lightweight record; drawing handled by canvas overlay
-      map.set(k, { x, y, el: null, fillEl: null, colorId: effectiveColorId });
-      try { item._lastManualSelected = { x, y }; } catch {}
-      if (pixelSelectedList) pixelSelectedList.hidden = false;
-      drawSelectionOverlay();
-      try { refreshPaletteTooltips(); } catch {}
-      return true;
-    }
+    function addPixelSelection(item, x, y, colorIdOverride = null, isBrokenStatus = false, isMatchedStatus = false){
+          const map = getSelectedMap(item); if (!map) return false;
+          const k = keyFor(x,y); if (map.has(k)) return false;
+          let effectiveColorId = colorIdOverride;
+          if (effectiveColorId == null) {
+            try { effectiveColorId = getItemPixelPaletteId(item, x, y); } catch {}
+          }
+          if (effectiveColorId != null && effectiveColorId !== 0 && isPremiumColorId(effectiveColorId)){
+            const hasSelectedAccounts = Array.isArray(readySelectedAccountIds) && readySelectedAccountIds.length > 0;
+            if (!hasSelectedAccounts) { try { showToast(t('messages.selectAccountFirst'), 'error', 2000); } catch {} return false; }
+            const remain = getPremiumColorRemainingLimit(effectiveColorId);
+            if (!(remain > 0)) { try { showToast(t('messages.premiumColorLimitReached'), 'error', 2000); } catch {} return false; }
+          }
+          // Store lightweight record; drawing handled by canvas overlay
+          map.set(k, { x, y, el: null, fillEl: null, colorId: effectiveColorId, isBroken: isBrokenStatus, isMatched: isMatchedStatus });
+          try { item._lastManualSelected = { x, y }; } catch {}
+          if (pixelSelectedList) pixelSelectedList.hidden = false;
+          drawSelectionOverlay();
+          try { refreshPaletteTooltips(); } catch {}
+          return true;
+        }
     function removePixelSelection(item, x, y){
       const map = getSelectedMap(item); if (!map) return false;
       const k = keyFor(x,y); const rec = map.get(k); if (!rec) return false;
@@ -7885,7 +7885,27 @@ const autoStartTrack = document.getElementById('auto-start-toggle');
                 }
 
                 if (colorDiffers) { */
-          if (isOpaquePixel(selItem, sx, sy) && (selectedOverrideColorId != null || !isSamePaletteIdAsBase(selItem, sx, sy))) {
+          // Tính toán isActuallyBroken và isCurrentPixelMatched cho pixel hiện tại
+          const targetPixelColorId = getItemPixelPaletteId(selItem, sx, sy);
+          const currentWorldX = Math.round((selItem.worldX || 0) + sx); // World X cho tính toán
+          const currentWorldY = Math.round((selItem.worldY || 0) + sy); // World Y cho tính toán
+          const worldPixelColor = getCompositeColorAtWorld(currentWorldX, currentWorldY);
+          const worldPixelColorId = worldPixelColor ? rgbToPaletteId(worldPixelColor.r, worldPixelColor.g, worldPixelColor.b) : null;
+
+          const isPixelOpaqueInSign = isOpaquePixel(selItem, sx, sy);
+          const isCurrentPixelMatched = isPixelOpaqueInSign && (worldPixelColorId === targetPixelColorId) && (worldPixelColor && worldPixelColor.a > 0);
+          
+          const targetRgb = getPaletteRgbById(targetPixelColorId);
+          const currentRgb = worldPixelColor ? [worldPixelColor.r, worldPixelColor.g, worldPixelColor.b] : null;
+
+          const isActuallyBroken = isPixelOpaqueInSign && targetRgb && currentRgb &&
+              areColorsSignificantlyDifferent(
+                  {r: targetRgb[0], g: targetRgb[1], b: targetRgb[2]},
+                  {r: currentRgb[0], g: currentRgb[1], b: currentRgb[2]},
+                  COLOR_DIFFERENCE_THRESHOLD
+              );
+
+          if (isPixelOpaqueInSign && (selectedOverrideColorId != null || !isSamePaletteIdAsBase(selItem, sx, sy))) {
             const pid = (selectedOverrideColorId != null && selectedOverrideColorId !== 0)
               ? selectedOverrideColorId
               : getItemPixelPaletteId(selItem, sx, sy);
@@ -7893,11 +7913,11 @@ const autoStartTrack = document.getElementById('auto-start-toggle');
             if (pid != null && pid !== 0 && isPremiumColorId(pid)){
               const remainNow = getPremiumColorRemainingLimit(pid);
               if (remainNow > 0) {
-                const didAdd = addPixelSelection(selItem, sx, sy, selectedOverrideColorId != null ? selectedOverrideColorId : null);
+                const didAdd = addPixelSelection(selItem, sx, sy, selectedOverrideColorId != null ? selectedOverrideColorId : null, isActuallyBroken, isCurrentPixelMatched);
                 if (didAdd) addedCount++;
               }
             } else {
-              const didAdd = addPixelSelection(selItem, sx, sy, selectedOverrideColorId != null ? selectedOverrideColorId : null);
+              const didAdd = addPixelSelection(selItem, sx, sy, selectedOverrideColorId != null ? selectedOverrideColorId : null, isActuallyBroken, isCurrentPixelMatched);
               if (didAdd) addedCount++;
             }
           }
@@ -8590,8 +8610,6 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
   renderBrokenPixelColors(); // Call render on startup for broken pixels
 
   // TẠM THỜI: Ghi đè brokenPixelPriorityColors và priorityColors để debug
-  brokenPixelPriorityColors = [22];
-  priorityColors = [22];
   renderBrokenPixelColors(); // Render lại sau khi ghi đè
   renderPriorityColors(); // Render lại sau khi ghi đè
 
@@ -8746,7 +8764,7 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
             currentColor,
             COLOR_DIFFERENCE_THRESHOLD
           ));
-          allPixels.push(createPixelObj(rec.c, wx, wy, { isBroken: broken, isMatched: pixelMatched }));
+          allPixels.push(createPixelObj(rec.colorId, rec.wx, rec.wy, { isBroken: rec.isBroken, isMatched: rec.isMatched }));
         });
       } else if (map) {
         map.forEach((rec) => {
@@ -8763,22 +8781,7 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
                   return; // Bỏ qua pixel nếu nằm ngoài vùng overlay
               }
           }
-
-          const pid = (rec && rec.colorId != null) ? rec.colorId : getItemPixelPaletteId(item, lx, ly);
-          const targetColor = getPaletteRgbById(pid);
-          const currentColor = getCompositeColorAtWorld(wx, wy);
-
-          const pixelMatched = (targetColor && currentColor &&
-                                 targetColor[0] === currentColor.r &&
-                                 targetColor[1] === currentColor.g &&
-                                 targetColor[2] === currentColor.b &&
-                                 currentColor.a > 0);
-          const broken = (targetColor && currentColor && areColorsSignificantlyDifferent(
-            {r: targetColor[0], g: targetColor[1], b: targetColor[2]},
-            currentColor,
-            COLOR_DIFFERENCE_THRESHOLD
-          ));
-          allPixels.push(createPixelObj(pid, wx, wy, { isBroken: broken, isMatched: pixelMatched }));
+          allPixels.push(createPixelObj(rec.colorId, wx, wy, { isBroken: rec.isBroken, isMatched: rec.isMatched }));
         });
       }
       
