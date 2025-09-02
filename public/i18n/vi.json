@@ -26,6 +26,10 @@
     "autoStart": {
       "on": "Tự động bắt đầu bật",
       "off": "Tự động bắt đầu tắt"
+    },
+    "advancedPaint": {
+      "on": "Advanced Paint (Bật)",
+      "off": "Advanced Paint (Tắt)"
     }
   },
   "modal": {
