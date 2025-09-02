@@ -16,59 +16,65 @@ document.addEventListener('DOMContentLoaded', function() {
   // const toggleAntiDetectionWrap = document.getElementById('toggle-anti-detection-wrap');
   // const toggleAntiDetectionLabel = document.getElementById('toggle-anti-detection-label');
   
+  const quickAddCfClearanceInput = document.getElementById('quick-add-cf-clearance-input');
+  const pasteCfClearanceButton = document.getElementById('paste-cf-clearance-button');
   const toggleSeassonCfClearance = document.getElementById('toggle-seasson-cf-clearance');
   const toggleSeassonCfClearanceWrap = document.getElementById('toggle-seasson-cf-clearance-wrap');
   const toggleSeassonCfClearanceLabel = document.getElementById('toggle-seasson-cf-clearance-label');
-
+ 
 // const quickAddInput = document.getElementById('quick-add-input'); // Removed because j and cf_clearance data is now automatically retrieved from cookies
   const quickAddButton = document.getElementById('quick-add-button');
   const quickAddNameInput = document.getElementById('quick-add-name-input'); // Retained to allow users to manually enter account names
-
+ 
   function setStatus(text) {
     if (!statusDiv) return;
     statusDiv.textContent = text || '';
     if (text) setTimeout(() => { if (statusDiv) statusDiv.textContent = ''; }, 2000);
   }
-
-  chrome.storage.local.get(['wplace_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance'], function(result) {
-    if (!tokenInput) return;
-    if (result && result.wplace_token) {
-      tokenInput.value = result.wplace_token;
+ 
+  // Merge chrome.storage.local.get calls into one
+  chrome.storage.local.get(['wplace_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'wplace_enabled', 'enableAntiDetection', 'seasson_cf_clearance_enabled'], function(result) {
+    // Update Pixel Token and World X/Y
+    if (tokenInput) {
+      tokenInput.value = (result && result.wplace_token) ? result.wplace_token : 'No token captured yet...';
     }
-    if (worldXInput) worldXInput.value = (result && result.wplace_world_x) ? result.wplace_world_x : '-';
-    if (worldYInput) worldYInput.value = (result && result.wplace_world_y) ? result.wplace_world_y : '-';
-    // Display captured cf_clearance
-    if (quickAddCfClearanceInput) quickAddCfClearanceInput.value = (result && result.wplace_cf_clearance) ? result.wplace_cf_clearance : '';
-  });
-
-  chrome.storage.local.get(['wplace_enabled', 'enableAntiDetection'], function(result) {
+    if (worldXInput) {
+      worldXInput.value = (result && result.wplace_world_x) ? result.wplace_world_x : '-';
+    }
+    if (worldYInput) {
+      worldYInput.value = (result && result.wplace_world_y) ? result.wplace_world_y : '-';
+    }
+    // Update quickAddCfClearanceInput
+    if (quickAddCfClearanceInput) {
+      quickAddCfClearanceInput.value = (result && result.wplace_cf_clearance) ? result.wplace_cf_clearance : '';
+    }
+ 
+    // Update "Enable capture and block" status
     let captureEnabled = result && typeof result.wplace_enabled === 'boolean' ? result.wplace_enabled : true;
-    // If wplace_enabled is not in storage, default to true and save it to storage
     if (result === undefined || typeof result.wplace_enabled === 'undefined') {
         chrome.storage.local.set({ wplace_enabled: true });
-        captureEnabled = true; // Ensure local variable is also updated
+        captureEnabled = true;
     }
     if (toggleCapture) toggleCapture.checked = captureEnabled;
     if (toggleWrap) toggleWrap.setAttribute('data-checked', String(!!captureEnabled));
     if (toggleLabel) toggleLabel.textContent = captureEnabled ? 'On' : 'Off';
-
-    // const antiDetectionEnabled = false; // Always set to false to disable anti-detection feature
-    const antiDetectionEnabled = result && typeof result.enableAntiDetection === 'boolean' ? result.enableAntiDetection : false;
+ 
+    // Update Anti-Detection status (always off)
+    const antiDetectionEnabled = false; // Always set to false to disable anti-detection feature
+    // const antiDetectionEnabled = result && typeof result.enableAntiDetection === 'boolean' ? result.enableAntiDetection : false;
     // if (toggleAntiDetection) toggleAntiDetection.checked = antiDetectionEnabled;
     // if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(!!antiDetectionEnabled));
-    // if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off'; // Always show as Off
-    // if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = antiDetectionEnabled ? 'On' : 'Off';
-  });
+    // if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off';
  
-  chrome.storage.local.get(['seasson_cf_clearance_enabled'], function(result) {
+    // Update Seasson Cf_Clearance status (always off)
     const seassonCfClearanceEnabled = false; // Always set to false to disable this feature for now
     if (toggleSeassonCfClearance) toggleSeassonCfClearance.checked = seassonCfClearanceEnabled;
     if (toggleSeassonCfClearanceWrap) toggleSeassonCfClearanceWrap.setAttribute('data-checked', String(seassonCfClearanceEnabled));
     if (toggleSeassonCfClearanceLabel) toggleSeassonCfClearanceLabel.textContent = 'Off';
   });
-
-   chrome.storage.onChanged.addListener(function(changes, area) {
-     if (!tokenInput) return;
+ 
+  chrome.storage.onChanged.addListener(function(changes, area) {
+    if (!tokenInput) return;
      if (area === 'local' && changes) {
       if (changes.wplace_token) {
         tokenInput.value = changes.wplace_token.newValue || 'No token captured yet...';
@@ -187,8 +193,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
 
-  const quickAddCfClearanceInput = document.getElementById('quick-add-cf-clearance-input');
-  const pasteCfClearanceButton = document.getElementById('paste-cf-clearance-button');
   if (pasteCfClearanceButton) {
     pasteCfClearanceButton.addEventListener('click', async function() {
       try {
