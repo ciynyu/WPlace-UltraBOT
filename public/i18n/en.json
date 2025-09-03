@@ -28,6 +28,10 @@
     "autoStart": {
       "on": "Auto start on",
       "off": "Auto start off"
+    },
+    "advancedPaint": {
+      "on": "Advanced Paint (On)",
+      "off": "Advanced Paint (Off)"
     }
   },
   "modal": {
@@ -74,13 +78,16 @@
     "maxSizeExceeded": "Maximum size is 1000x1000 pixels.",
     "alphaThreshold": "Transparency",
     "colorMetric": "Color algorithm",
+    "colorConversion": "Color Conversion",
     "metricRgb": "RGB (fast)",
     "metricLab": "Lab (CIE76)",
     "metricOklab": "Oklab",
     "metricCiede2000": "CIEDE2000 (more accurate, slower)",
     "dithering": "Dithering",
-    "ditheringOn": "Dithering: ON",
-    "ditheringOff": "Dithering: OFF"
+    "ditheringOn": "ON",
+    "ditheringOff": "OFF",
+    "colorConversionOn": "ON",
+    "colorConversionOff": "OFF"
   },
   "settings": {
     "cf_clearance": "cf_clearance",
@@ -100,7 +107,8 @@
     "edit": "Edit",
     "checkPixels": "Check",
     "shop": "Shop",
-    "delete": "Delete"
+    "delete": "Delete",
+    "selectOverlay": "Select Overlay"
   },
   "thumb": {
     "imageAlt": "Image {n}",
@@ -146,7 +154,26 @@
     "accountNotFound": "Account not found",
     "purchaseSuccess": "Purchase successful",
     "purchaseFail": "Purchase failed",
-    "tokenPastedFromExtension": "Token pasted from extension"
+    "tokenPastedFromExtension": "Token pasted from extension",
+    "invalidUpdateInterval": "Invalid update interval.",
+    "updateIntervalSaved": "Update interval saved.",
+    "updateIntervalSaveFailed": "Update interval save failed.",
+    "overlayDrawingCancelled": "Overlay drawing cancelled.",
+    "dragToDrawOverlay": "Drag to draw overlay.",
+    "noImageToDrawOn": "No image to draw on.",
+    "pickColorModeOn": "Pick Color Mode: ON",
+    "pickColorModeOff": "Pick Color Mode: OFF",
+    "colorAddedToPriorityList": "Color added to priority list.",
+    "colorAlreadyInPriorityList": "Color already in priority list.",
+    "noColorSelected": "No color selected.",
+    "priorityListCleared": "Priority list cleared.",
+    "pickBrokenPixelColorModeOn": "Pick Broken Pixel Color Mode: ON",
+    "pickBrokenPixelColorModeOff": "Pick Broken Pixel Color Mode: OFF",
+    "colorAddedToBrokenPixelList": "Color added to broken pixel list.",
+    "colorAlreadyInBrokenPixelList": "Color already in broken pixel list.",
+    "brokenPixelListCleared": "Broken pixel list cleared.",
+    "noColorAtLocation": "No color at location.",
+    "duplicatesRemoved": "Duplicates removed."
   },
   "shop": {
     "premiumTitle": "Premium Colors",
@@ -170,5 +197,3 @@
     "load": "Load"
   }
 }
-
-

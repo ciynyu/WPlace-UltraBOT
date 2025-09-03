@@ -3,8 +3,10 @@
     "accounts": "账户"
   },
   "pixel": {
-    "powerLabel": "点数：{count} / {max}",
-    "totalDroplets": "总 Droplets"
+    "powerLabel": "点数：{count} / {max}"
+  },
+  "droplets": {
+    "totalLabel": "总 Droplets: {count}"
   },
   "ready": {
     "prepare": "准备",
@@ -26,6 +28,10 @@
     "autoStart": {
       "on": "自动开始 开",
       "off": "自动开始 关"
+    },
+    "advancedPaint": {
+      "on": "高级绘制 (开)",
+      "off": "高级绘制 (关)"
     }
   },
   "modal": {
@@ -73,18 +79,19 @@
     "alphaThreshold": "透明度",
     "colorMetric": "颜色算法",
     "colorConversion": "颜色转换",
-    "metricRgb": "RGB (fast)",
+    "metricRgb": "RGB (快速)",
     "metricLab": "Lab (CIE76)",
     "metricOklab": "Oklab",
-    "metricCiede2000": "CIEDE2000 (more accurate, slower)",
-    "dithering": "Dithering",
-    "ditheringOn": "Dithering: ON",
-    "ditheringOff": "Dithering: OFF",
-    "colorConversionOff": "颜色转换：关",
-    "colorConversionOn": "颜色转换：开"
+    "metricCiede2000": "CIEDE2000 (更准确，更慢)",
+    "dithering": "抖动",
+    "ditheringOn": "抖动：开",
+    "ditheringOff": "抖动：关",
+    "colorConversionOff": "关",
+    "colorConversionOn": "开"
   },
   "settings": {
-    "cf_clearance": "cf_clearance"
+    "cf_clearance": "cf_clearance",
+    "updateIntervalMinutes": "更新间隔 (分钟)"
   },
   "mosaic": {
     "title": "拼图",
@@ -101,7 +108,8 @@
     "checkPixels": "检查",
     "shop": "商店",
     "delete": "删除",
-    "selectOverlay": "选择叠加层"
+    "selectOverlay": "选择叠加层",
+    "unsave": "取消保存"
   },
   "thumb": {
     "imageAlt": "图片 {n}",
@@ -112,7 +120,8 @@
   },
   "palette": {
     "transparentTitle": "透明（图片颜色）",
-    "colorTitle": "颜色 #{id}"
+    "colorTitle": "颜色 #{id}",
+    "premiumColorTitle": "高级颜色 (剩余 {remain}/{total})"
   },
   "paletteMode": {
     "premium": "使用高级颜色",
@@ -157,7 +166,28 @@
     "cfClearanceChange": "请更改 cf_clearance。",
     "purchaseSuccess": "购买成功",
     "purchaseFail": "购买失败",
-    "tokenPastedFromExtension": "已从扩展粘贴 token"
+    "tokenPastedFromExtension": "已从扩展粘贴 token",
+    "premiumColorLimitReached": "所选高级颜色容量不足。",
+    "accountNotFound": "找不到账户",
+    "invalidUpdateInterval": "更新间隔无效。",
+    "updateIntervalSaved": "更新间隔已保存。",
+    "updateIntervalSaveFailed": "更新间隔保存失败。",
+    "overlayDrawingCancelled": "叠加层绘制已取消。",
+    "dragToDrawOverlay": "拖动以绘制叠加层。",
+    "noImageToDrawOn": "没有可绘制的图片。",
+    "pickColorModeOn": "拾色模式：开",
+    "pickColorModeOff": "拾色模式：关",
+    "colorAddedToPriorityList": "颜色已添加到优先级列表。",
+    "colorAlreadyInPriorityList": "颜色已在优先级列表。",
+    "noColorSelected": "未选择颜色。",
+    "priorityListCleared": "优先级列表已清除。",
+    "pickBrokenPixelColorModeOn": "拾取损坏像素颜色模式：开",
+    "pickBrokenPixelColorModeOff": "拾取损坏像素颜色模式：关",
+    "colorAddedToBrokenPixelList": "颜色已添加到损坏像素列表。",
+    "colorAlreadyInBrokenPixelList": "颜色已在损坏像素列表。",
+    "brokenPixelListCleared": "损坏像素列表已清除。",
+    "noColorAtLocation": "该位置没有颜色。",
+    "duplicatesRemoved": "已移除重复项。"
   },
   "favorites": {
     "openTitle": "打开收藏",

@@ -1194,10 +1194,6 @@
               <label for="img-height" data-i18n="preview.height">Yükseklik</label>
               <input id="img-height" type="number" min="1" max="1000" step="1" />
               <!-- img-template-x and img-template-y moved and resized -->
-              <label for="img-template-x" data-i18n="template.xCoord">X:</label>
-              <input id="img-template-x" type="number" step="1" value="0" style="width: 80px;" />
-              <label for="img-template-y" data-i18n="template.yCoord">Y:</label>
-              <input id="img-template-y" type="number" step="1" value="0" style="width: 80px;" />
               
               <label for="img-color-conversion-toggle" data-i18n="preview.colorConversion">Color Conversion</label>
               <button id="img-color-conversion-toggle" class="app-btn" type="button" data-state="on" data-i18n="preview.colorConversionOn">Color Conversion: ON</button>
@@ -1386,6 +1382,8 @@
       await loadI18n(I18N_LANG);
       applyTranslations();
       refreshLangDropdown();
+      // Ensure overlays are re-rendered to apply updated translations to button text
+      try { if (typeof renderOverlayList === 'function') { renderOverlayList(); } } catch {}
       try { if (typeof loadAccounts === 'function') { await loadAccounts(); } } catch {}
     }
     async function initI18n(){
@@ -7030,27 +7028,29 @@ function loadImage(area, no, preserveView = false) {
             const actions = document.createElement('div');
             actions.className = 'overlay-item-actions';
             
-            const toggleInput = document.createElement('input');
-            toggleInput.type = 'checkbox';
-            toggleInput.checked = overlay.isVisible !== false; // Default to true if not set
-            toggleInput.title = 'Toggle visibility';
-            toggleInput.onchange = (e) => {
-                overlay.isVisible = e.target.checked;
-                saveOverlaysToStorage();
-                updateRangeOverlayPosition(); // Update display immediately
-            };
-            actions.appendChild(toggleInput);
+            // Removed the toggle input (checkbox)
+            // const toggleInput = document.createElement('input');
+            // toggleInput.type = 'checkbox';
+            // toggleInput.checked = overlay.isVisible !== false; // Default to true if not set
+            // toggleInput.title = 'Toggle visibility';
+            // toggleInput.onchange = (e) => {
+            //     overlay.isVisible = e.target.checked;
+            //     saveOverlaysToStorage();
+            //     updateRangeOverlayPosition(); // Update display immediately
+            // };
+            // actions.appendChild(toggleInput);
 
             const selectBtn = document.createElement('button');
             selectBtn.textContent = t('buttons.selectOverlay');
             selectBtn.title = 'Select for drawing/editing';
             selectBtn.onclick = (e) => {
                 e.stopPropagation();
-                // Toggle selection: if already selected, deselect; otherwise, select this one
+                // Modify the selectOverlay button logic: just click to toggle selection
+                // Change to just clicking buttons.selectOverlay selects and deselects
                 selectedOverlayIndex = (selectedOverlayIndex === index) ? -1 : index;
                 saveOverlaysToStorage(); // Save selection state
                 renderOverlayList(); // Re-render to update selected class
-                updateRangeOverlayPosition(); // Update range overlay display
+                updateRangeOverlayPosition(); // Update overlay display
             };
             actions.appendChild(selectBtn);
 

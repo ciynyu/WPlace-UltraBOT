@@ -3,8 +3,10 @@
     "accounts": "Konten"
   },
   "pixel": {
-    "powerLabel": "Pixelkraft: {count} / {max}",
-    "totalDroplets": "Gesamtdroplets"
+    "powerLabel": "Pixelkraft: {count} / {max}"
+  },
+  "droplets": {
+    "totalLabel": "Gesamtdroplets: {count}"
   },
   "ready": {
     "prepare": "Bereit",
@@ -26,6 +28,10 @@
     "autoStart": {
       "on": "Auto-Start an",
       "off": "Auto-Start aus"
+    },
+    "advancedPaint": {
+      "on": "Erweiterte Malerei (Ein)",
+      "off": "Erweiterte Malerei (Aus)"
     }
   },
   "modal": {
@@ -72,16 +78,20 @@
     "maxSizeExceeded": "Maximale Größe ist 1000x1000 Pixel.",
     "alphaThreshold": "Transparenz",
     "colorMetric": "Farbalgorithmus",
-    "metricRgb": "RGB (fast)",
+    "colorConversion": "Farbkonvertierung",
+    "metricRgb": "RGB (schnell)",
     "metricLab": "Lab (CIE76)",
     "metricOklab": "Oklab",
-    "metricCiede2000": "CIEDE2000 (more accurate, slower)",
+    "metricCiede2000": "CIEDE2000 (genauer, langsamer)",
     "dithering": "Dithering",
-    "ditheringOn": "Dithering: ON",
-    "ditheringOff": "Dithering: OFF"
+    "ditheringOn": "AN",
+    "ditheringOff": "AUS",
+    "colorConversionOn": "AN",
+    "colorConversionOff": "AUS"
   },
   "settings": {
-    "cf_clearance": "cf_clearance"
+    "cf_clearance": "cf_clearance",
+    "updateIntervalMinutes": "Update Interval (minutes)"
   },
   "mosaic": {
     "title": "Mosaik",
@@ -97,7 +107,9 @@
     "edit": "Bearbeiten",
     "checkPixels": "Prüfen",
     "shop": "Shop",
-    "delete": "Löschen"
+    "delete": "Löschen",
+    "selectOverlay": "Overlay auswählen",
+    "unsave": "Rückgängig"
   },
   "thumb": {
     "imageAlt": "Bild {n}",
@@ -108,7 +120,12 @@
   },
   "palette": {
     "transparentTitle": "Transparent (Bildfarbe)",
-    "colorTitle": "Farbe #{id}"
+    "colorTitle": "Farbe #{id}",
+    "premiumColorTitle": "Premium-Farbe (verbleibend {remain}/{total})"
+  },
+  "paletteMode": {
+    "premium": "Premium-Farbe verwenden",
+    "free": "Kostenlose Farbe verwenden"
   },
   "controls": {
     "movement": "Bewegung"
@@ -136,11 +153,26 @@
     "cfClearanceChange": "Bitte cf_clearance ändern.",
     "purchaseSuccess": "Kauf erfolgreich",
     "purchaseFail": "Kauf fehlgeschlagen",
-    "tokenPastedFromExtension": "Token aus Erweiterung eingefügt"
-  },
-  "paletteMode": {
-    "premium": "Premium-Farbe verwenden",
-    "free": "Kostenlose Farbe verwenden"
+    "tokenPastedFromExtension": "Token aus Erweiterung eingefügt",
+    "invalidUpdateInterval": "Ungültiges Update-Intervall.",
+    "updateIntervalSaved": "Update-Intervall gespeichert.",
+    "updateIntervalSaveFailed": "Fehler beim Speichern des Update-Intervalls.",
+    "overlayDrawingCancelled": "Overlay-Zeichnung abgebrochen.",
+    "dragToDrawOverlay": "Ziehen, um Overlay zu zeichnen.",
+    "noImageToDrawOn": "Kein Bild zum Zeichnen vorhanden.",
+    "pickColorModeOn": "Farbwahl-Modus: EIN",
+    "pickColorModeOff": "Farbwahl-Modus: AUS",
+    "colorAddedToPriorityList": "Farbe zur Prioritätsliste hinzugefügt.",
+    "colorAlreadyInPriorityList": "Farbe bereits in der Prioritätsliste.",
+    "noColorSelected": "Keine Farbe ausgewählt.",
+    "priorityListCleared": "Prioritätsliste gelöscht.",
+    "pickBrokenPixelColorModeOn": "Modus \"Kaputter Pixel auswählen\": EIN",
+    "pickBrokenPixelColorModeOff": "Modus \"Kaputter Pixel auswählen\": AUS",
+    "colorAddedToBrokenPixelList": "Farbe zur Liste der kaputten Pixel hinzugefügt.",
+    "colorAlreadyInBrokenPixelList": "Farbe bereits in der Liste der kaputten Pixel.",
+    "brokenPixelListCleared": "Liste der kaputten Pixel gelöscht.",
+    "noColorAtLocation": "Keine Farbe an dieser Position.",
+    "duplicatesRemoved": "Duplikate entfernt."
   },
   "shop": {
     "premiumTitle": "Premiumfarben",
@@ -162,7 +194,9 @@
     "saveTitle": "Position speichern",
     "nameLabel": "Name",
     "load": "Laden"
+  },
+  "template": {
+    "xCoord": "X-Koordinate",
+    "yCoord": "Y-Koordinate"
   }
 }
-
-

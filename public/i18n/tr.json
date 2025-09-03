@@ -3,8 +3,10 @@
     "accounts": "Hesaplar"
   },
   "pixel": {
-    "powerLabel": "Piksel gücü: {count} / {max}",
-    "totalDroplets": "Toplam Damlacık"
+    "powerLabel": "Piksel gücü: {count} / {max}"
+  },
+  "droplets": {
+    "totalLabel": "Toplam Damlacık: {count}"
   },
   "ready": {
     "prepare": "Hazırlan",
@@ -26,13 +28,18 @@
     "autoStart": {
       "on": "Oto başlat açık",
       "off": "Oto başlat kapalı"
+    },
+    "advancedPaint": {
+      "on": "Gelişmiş Boyama (Açık)",
+      "off": "Gelişmiş Boyama (Kapalı)"
     }
   },
   "modal": {
     "closeTitle": "Kapat"
   },
   "tabs": {
-    "accounts": "Hesaplar"
+    "accounts": "Hesaplar",
+    "settings": "Ayarlar"
   },
   "accounts": {
     "add": "Hesap ekle",
@@ -76,10 +83,16 @@
     "metricOklab": "Oklab",
     "metricCiede2000": "CIEDE2000 (more accurate, slower)",
     "dithering": "Dithering",
-    "ditheringOn": "Dithering: ON",
-    "ditheringOff": "Dithering: OFF"
+    "ditheringOn": "AÇIK",
+    "ditheringOff": "KAPALI",
+    "colorConversion": "Renk Dönüşümü",
+    "colorConversionOn": "AÇIK",
+    "colorConversionOff": "KAPALI"
   },
-  "settings": {},
+  "settings": {
+    "cf_clearance": "cf_clearance",
+    "updateIntervalMinutes": "Update Interval (minutes)"
+  },
   "mosaic": {
     "title": "Mozaik",
     "use2": "2 kord kullan",
@@ -94,7 +107,9 @@
     "edit": "Düzenle",
     "checkPixels": "Kontrol",
     "shop": "Mağaza",
-    "delete": "Sil"
+    "delete": "Sil",
+    "selectOverlay": "Katman Seç",
+    "unsave": "Kaydı Kaldır"
   },
   "thumb": {
     "imageAlt": "Resim {n}",
@@ -125,7 +140,7 @@
   "messages": {
     "selectAccountFirst": "Önce hesap seçin.",
     "maxPixelsReached": "Maksimum piksel sayısına ulaştınız: {limit}/{limit}",
-    
+    "addCfClearancePrompt": "Lütfen cf_clearance değerini Ayarlar'a ekleyin (min 30 karakter).",
     "max200Accounts": "En fazla 200 hesap seçebilirsiniz.",
     "startRequirementsMissing": "Başlatmak için token girin, hesap seçin ve en az 1 piksel seçin.",
     "noSelectedImage": "Seçili resim yok.",
@@ -134,13 +149,32 @@
     "insufficientPixelPower": "Yetersiz piksel gücü: {n} piksel gönderilemedi.",
     "imageLoadFailed": "Resim yüklenemedi. Değerleri kontrol edin.",
     "tokenAlreadyExists": "Bu token ile daha önce hesap kaydedildi.",
-    
+    "cfCannotBeClearedWithAccounts": "Hesaplar varken cf_clearance boş bırakılamaz.",
     "cfClearanceChange": "Lütfen cf_clearance değiştirin.",
     "premiumColorLimitReached": "Seçilen premium renk için yeterli kapasite yok.",
     "accountNotFound": "Hesap bulunamadı",
     "purchaseSuccess": "Satın alım başarılı",
     "purchaseFail": "Satın alım başarısız",
-    "tokenPastedFromExtension": "Token eklentiden yapıştırıldı"
+    "tokenPastedFromExtension": "Token eklentiden yapıştırıldı",
+    "invalidUpdateInterval": "Geçersiz güncelleme aralığı.",
+    "updateIntervalSaved": "Güncelleme aralığı kaydedildi.",
+    "updateIntervalSaveFailed": "Güncelleme aralığı kaydetme başarısız.",
+    "overlayDrawingCancelled": "Yerleşim çizimi iptal edildi.",
+    "dragToDrawOverlay": "Yerleşim çizmek için sürükleyin.",
+    "noImageToDrawOn": "Çizilecek resim yok.",
+    "pickColorModeOn": "Renk Seçim Modu: AÇIK",
+    "pickColorModeOff": "Renk Seçim Modu: KAPALI",
+    "colorAddedToPriorityList": "Renk öncelik listesine eklendi.",
+    "colorAlreadyInPriorityList": "Renk zaten öncelik listesinde.",
+    "noColorSelected": "Renk seçilmedi.",
+    "priorityListCleared": "Öncelik listesi temizlendi.",
+    "pickBrokenPixelColorModeOn": "Bozuk Piksel Renk Seçim Modu: AÇIK",
+    "pickBrokenPixelColorModeOff": "Bozuk Piksel Renk Seçim Modu: KAPALI",
+    "colorAddedToBrokenPixelList": "Renk bozuk piksel listesine eklendi.",
+    "colorAlreadyInBrokenPixelList": "Renk zaten bozuk piksel listesinde.",
+    "brokenPixelListCleared": "Bozuk piksel listesi temizlendi.",
+    "noColorAtLocation": "Konumda renk yok.",
+    "duplicatesRemoved": "Yinelenenler kaldırıldı."
   },
   "shop": {
     "premiumTitle": "Premium Renkler",
@@ -162,7 +196,9 @@
     "saveTitle": "Konumu kaydet",
     "nameLabel": "Ad",
     "load": "Yükle"
+  },
+  "template": {
+    "xCoord": "X Koordinatı",
+    "yCoord": "Y Koordinatı"
   }
 }
-
-

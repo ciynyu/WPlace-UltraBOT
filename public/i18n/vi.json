@@ -84,10 +84,10 @@
     "metricOklab": "Oklab",
     "metricCiede2000": "CIEDE2000 (chính xác hơn, chậm hơn)",
     "dithering": "Làm mịn màu",
-    "ditheringOn": "bật",
-    "ditheringOff": "tắt",
-    "colorConversionOff": "tắt",
-    "colorConversionOn": "bật"
+    "ditheringOn": "BẬT",
+    "ditheringOff": "TẮT",
+    "colorConversionOff": "TẮT",
+    "colorConversionOn": "BẬT"
   },
   "settings": {
     "cf_clearance": "cf_clearance",
@@ -108,7 +108,8 @@
     "checkPixels": "Kiểm tra",
     "shop": "Cửa hàng",
     "delete": "Xóa",
-    "selectOverlay": "Chọn Lớp Phủ"
+    "selectOverlay": "Chọn Lớp Phủ",
+    "unsave": "Bỏ lưu"
   },
   "thumb": {
     "imageAlt": "Ảnh {n}",
@@ -155,7 +156,26 @@
     "purchaseSuccess": "Mua thành công",
     "purchaseFail": "Mua thất bại",
     "tokenPastedFromExtension": "Đã dán token từ extension",
-    "overlayAlreadySelected": "Overlay đã được chọn."
+    "overlayAlreadySelected": "Overlay đã được chọn.",
+    "invalidUpdateInterval": "Khoảng thời gian cập nhật không hợp lệ.",
+    "updateIntervalSaved": "Đã lưu khoảng thời gian cập nhật.",
+    "updateIntervalSaveFailed": "Lưu khoảng thời gian cập nhật thất bại.",
+    "overlayDrawingCancelled": "Hủy vẽ lớp phủ.",
+    "dragToDrawOverlay": "Kéo để vẽ lớp phủ.",
+    "noImageToDrawOn": "Không có ảnh để vẽ.",
+    "pickColorModeOn": "Chế độ chọn màu: BẬT",
+    "pickColorModeOff": "Chế độ chọn màu: TẮT",
+    "colorAddedToPriorityList": "Màu đã được thêm vào danh sách ưu tiên.",
+    "colorAlreadyInPriorityList": "Màu đã có trong danh sách ưu tiên.",
+    "noColorSelected": "Chưa chọn màu.",
+    "priorityListCleared": "Đã xóa danh sách ưu tiên.",
+    "pickBrokenPixelColorModeOn": "Chế độ chọn màu pixel lỗi: BẬT",
+    "pickBrokenPixelColorModeOff": "Chế độ chọn màu pixel lỗi: TẮT",
+    "colorAddedToBrokenPixelList": "Màu đã được thêm vào danh sách pixel lỗi.",
+    "colorAlreadyInBrokenPixelList": "Màu đã có trong danh sách pixel lỗi.",
+    "brokenPixelListCleared": "Đã xóa danh sách pixel lỗi.",
+    "noColorAtLocation": "Không có màu tại vị trí này.",
+    "duplicatesRemoved": "Đã xóa các bản sao."
   },
   "shop": {
     "premiumTitle": "Màu Premium",

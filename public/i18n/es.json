@@ -3,8 +3,10 @@
     "accounts": "Cuentas"
   },
   "pixel": {
-    "powerLabel": "Potencia de píxel: {count} / {max}",
-    "totalDroplets": "Droplets totales"
+    "powerLabel": "Potencia de píxel: {count} / {max}"
+  },
+  "droplets": {
+    "totalLabel": "Droplets totales: {count}"
   },
   "ready": {
     "prepare": "Listo",
@@ -26,6 +28,10 @@
     "autoStart": {
       "on": "Inicio automático activado",
       "off": "Inicio automático desactivado"
+    },
+    "advancedPaint": {
+      "on": "Pintura Avanzada (Activado)",
+      "off": "Pintura Avanzada (Desactivado)"
     }
   },
   "modal": {
@@ -72,16 +78,20 @@
     "maxSizeExceeded": "El tamaño máximo es 1000x1000 píxeles.",
     "alphaThreshold": "Transparencia",
     "colorMetric": "Algoritmo color",
+    "colorConversion": "Conversión de color",
     "metricRgb": "RGB (rápido, \"seguro\")",
     "metricLab": "Lab (CIE76)",
     "metricOklab": "Oklab",
     "metricCiede2000": "CIEDE2000 (más preciso, más lento)",
     "dithering": "Dithering",
-    "ditheringOn": "Dithering: ON",
-    "ditheringOff": "Dithering: OFF"
+    "ditheringOn": "ON",
+    "ditheringOff": "OFF",
+    "colorConversionOn": "ON",
+    "colorConversionOff": "OFF"
   },
   "settings": {
-    "cf_clearance": "cf_clearance"
+    "cf_clearance": "cf_clearance",
+    "updateIntervalMinutes": "Update Interval (minutes)"
   },
   "mosaic": {
     "title": "Mosaico",
@@ -97,7 +107,9 @@
     "edit": "Editar",
     "checkPixels": "Comprobar",
     "shop": "Tienda",
-    "delete": "Eliminar"
+    "delete": "Eliminar",
+    "selectOverlay": "Seleccionar capa",
+    "unsave": "Desguardar"
   },
   "thumb": {
     "imageAlt": "Imagen {n}",
@@ -153,7 +165,26 @@
     "cfClearanceChange": "Por favor cambia cf_clearance.",
     "purchaseSuccess": "Compra exitosa",
     "purchaseFail": "Compra fallida",
-    "tokenPastedFromExtension": "Token pegado desde la extensión"
+    "tokenPastedFromExtension": "Token pegado desde la extensión",
+    "invalidUpdateInterval": "Intervalo de actualización no válido.",
+    "updateIntervalSaved": "Intervalo de actualización guardado.",
+    "updateIntervalSaveFailed": "Error al guardar el intervalo de actualización.",
+    "overlayDrawingCancelled": "Dibujo de superposición cancelado.",
+    "dragToDrawOverlay": "Arrastra para dibujar una superposición.",
+    "noImageToDrawOn": "No hay imagen para dibujar.",
+    "pickColorModeOn": "Modo selección de color: ON",
+    "pickColorModeOff": "Modo selección de color: OFF",
+    "colorAddedToPriorityList": "Color añadido a la lista de prioridades.",
+    "colorAlreadyInPriorityList": "El color ya está en la lista de prioridades.",
+    "noColorSelected": "No se ha seleccionado ningún color.",
+    "priorityListCleared": "Lista de prioridades borrada.",
+    "pickBrokenPixelColorModeOn": "Modo selección de color de píxeles rotos: ON",
+    "pickBrokenPixelColorModeOff": "Modo selección de color de píxeles rotos: OFF",
+    "colorAddedToBrokenPixelList": "Color añadido a la lista de píxeles rotos.",
+    "colorAlreadyInBrokenPixelList": "El color ya está en la lista de píxeles rotos.",
+    "brokenPixelListCleared": "Lista de píxeles rotos borrada.",
+    "noColorAtLocation": "No hay color en la ubicación.",
+    "duplicatesRemoved": "Duplicados eliminados."
   },
   "favorites": {
     "openTitle": "Abrir favoritos",
@@ -162,7 +193,9 @@
     "saveTitle": "Guardar ubicación",
     "nameLabel": "Nombre",
     "load": "Cargar"
+  },
+  "template": {
+    "xCoord": "Coordenada X",
+    "yCoord": "Coordenada Y"
   }
 }
-
-
