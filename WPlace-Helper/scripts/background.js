@@ -30,11 +30,11 @@ async function processTokenQueue() {
   chrome.storage.local.get(['tokenQueue'], async (result) => {
     let tokenQueue = result.tokenQueue || [];
     if (tokenQueue.length === 0) {
-      console.log("[WPlace-Helper] Token queue is empty. Clearing token retry alarm.");
+      console.log("[WPlace-Helper] Token queue empty. Clearing token retry alarm.");
       chrome.alarms.clear(ALARM_NAME); // Stop token retry alarm if queue is empty
       return;
     }
- 
+
     console.log(`[WPlace-Helper] Processing token queue (${tokenQueue.length} items)...`);
     const sentSuccessfully = [];
     for (let i = 0; i < tokenQueue.length; i++) {
@@ -44,12 +44,12 @@ async function processTokenQueue() {
         sentSuccessfully.push(i);
       }
     }
- 
+
     // Remove successfully sent tokens from the queue (in reverse order to avoid index errors)
     for (let i = sentSuccessfully.length - 1; i >= 0; i--) {
       tokenQueue.splice(sentSuccessfully[i], 1);
     }
- 
+
     chrome.storage.local.set({ tokenQueue }, () => {
       console.log(`[WPlace-Helper] Token queue updated. Remaining: ${tokenQueue.length}`);
       if (tokenQueue.length === 0) {
@@ -58,7 +58,7 @@ async function processTokenQueue() {
     });
   });
 }
- 
+
 // Start or schedule token retry alarm
 function scheduleTokenRetryAlarm() {
   chrome.alarms.get(ALARM_NAME, (alarm) => {
@@ -70,8 +70,8 @@ function scheduleTokenRetryAlarm() {
     }
   });
 }
- 
-// Start or schedule cf_clearance retry alarm
+
+// New: Start or schedule cf_clearance retry alarm
 function scheduleCfClearanceRetryAlarm() {
   chrome.alarms.get(CF_CLEARANCE_ALARM_NAME, (alarm) => {
     if (!alarm) {
@@ -82,7 +82,7 @@ function scheduleCfClearanceRetryAlarm() {
     }
   });
 }
- 
+
 // Listen for alarm events
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
@@ -93,7 +93,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     processCfClearanceQueue();
   }
 });
- 
+
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === 'wplace_token_found') { // Removed check for msg.token because cfClearance might be the primary data
@@ -105,49 +105,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       userAgent: navigator.userAgent || null,
       timestamp: Date.now()
     };
- 
+
     chrome.storage.local.get(['wplace_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'tokenQueue'], async (result) => {
       const currentToken = result.wplace_token;
       const currentWorldX = result.wplace_world_x;
       const currentWorldY = result.wplace_world_y;
       const currentCfClearance = result.wplace_cf_clearance; // Get current cfClearance from storage
-      let tokenQueue = result.tokenQueue || [];
- 
-      // If the queue is empty, try to send immediately
-      if (tokenQueue.length === 0) {
-        console.log("[WPlace-Helper] Token queue is empty. Attempting to send token immediately.");
-        const sentImmediately = await sendTokenToBackend(tokenData);
-        if (sentImmediately) {
-          console.log("[WPlace-Helper] Token sent immediately and successfully.");
-          // Only update storage if the token is new or coordinates changed
-          if (currentToken !== tokenData.token || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(tokenData.worldY) || currentCfClearance !== tokenData.cfClearance) {
-            const toStore = {};
-            if (tokenData.token) toStore.wplace_token = tokenData.token;
-            if (tokenData.worldX) toStore.wplace_world_x = String(tokenData.worldX);
-            if (tokenData.worldY) toStore.wplace_world_y = String(tokenData.worldY);
-            if (tokenData.cfClearance) toStore.wplace_cf_clearance = tokenData.cfClearance;
-            chrome.storage.local.set(toStore);
-          }
-          sendResponse({ ok: true });
-          return; // Exit as token was sent
-        } else {
-          console.log("[WPlace-Helper] Immediate token send failed. Adding to queue.");
-        }
-      }
- 
-      // If not sent immediately, or if queue was not empty, proceed with queue logic
+
+      // Only update storage and queue if the new token/cfClearance is different or coordinates change
       if (currentToken !== tokenData.token || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(tokenData.worldY) || currentCfClearance !== tokenData.cfClearance) {
         const toStore = {};
         if (tokenData.token) toStore.wplace_token = tokenData.token;
         if (tokenData.worldX) toStore.wplace_world_x = String(tokenData.worldX);
         if (tokenData.worldY) toStore.wplace_world_y = String(tokenData.worldY);
-        if (tokenData.cfClearance) toStore.wplace_cf_clearance = tokenData.cfClearance;
- 
+        if (tokenData.cfClearance) toStore.wplace_cf_clearance = tokenData.cfClearance; // Store cfClearance
+
         chrome.storage.local.set(toStore, () => {
           sendResponse({ ok: true });
         });
- 
+
         // Add tokenData to queue
+        let tokenQueue = result.tokenQueue || [];
         tokenQueue.push(tokenData);
         chrome.storage.local.set({ tokenQueue }, () => {
           console.log("[WPlace-Helper] Token added to queue. Scheduling retry alarm.");
@@ -165,25 +143,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     processTokenQueue();
   }
 });
- 
+
 // When Service Worker is activated (e.g., when browser starts or extension is installed/updated)
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[WPlace-Helper] Service Worker installed or updated. Scheduling initial alarms.");
   scheduleTokenRetryAlarm();
-  scheduleCfClearanceRetryAlarm(); // Schedule the new alarm
+  scheduleCfClearanceRetryAlarm(); // Schedule new alarm
   processTokenQueue();
-  processCfClearanceQueue(); // Process the new queue immediately
+  processCfClearanceQueue(); // Process new queue immediately
 });
- 
+
 chrome.runtime.onStartup.addListener(() => {
   console.log("[WPlace-Helper] Browser started. Scheduling alarms.");
   scheduleTokenRetryAlarm();
-  scheduleCfClearanceRetryAlarm(); // Schedule the new alarm
+  scheduleCfClearanceRetryAlarm(); // Schedule new alarm
   processTokenQueue();
-  processCfClearanceQueue(); // Process the new queue immediately
+  processCfClearanceQueue(); // Process new queue immediately
 });
- 
-// Process cf_clearance queue (separate from token queue)
+
+// New: Process cf_clearance queue (separate from token queue)
 async function processCfClearanceQueue() {
   chrome.storage.local.get(['cfClearanceQueue'], async (result) => {
     let cfClearanceQueue = result.cfClearanceQueue || [];
@@ -192,7 +170,7 @@ async function processCfClearanceQueue() {
       chrome.alarms.clear(CF_CLEARANCE_ALARM_NAME); // Stop alarm if queue is empty
       return;
     }
- 
+
     console.log(`[WPlace-Helper] Processing cf_clearance queue (${cfClearanceQueue.length} items)...`);
     const sentSuccessfully = [];
     for (let i = 0; i < cfClearanceQueue.length; i++) {
@@ -221,12 +199,12 @@ async function processCfClearanceQueue() {
         sentSuccessfully.push(i);
       }
     }
- 
+
     // Remove successfully sent cf_clearances from the queue (in reverse order)
     for (let i = sentSuccessfully.length - 1; i >= 0; i--) {
       cfClearanceQueue.splice(sentSuccessfully[i], 1);
     }
- 
+
     chrome.storage.local.set({ cfClearanceQueue }, () => {
       console.log(`[WPlace-Helper] Cf_clearance queue updated. Remaining: ${cfClearanceQueue.length}`);
       if (cfClearanceQueue.length === 0) {
@@ -235,7 +213,7 @@ async function processCfClearanceQueue() {
     });
   });
 }
- 
+
 // Process queues immediately when script is loaded to catch any remaining items
 processTokenQueue();
 processCfClearanceQueue();
