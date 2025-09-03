@@ -6907,10 +6907,8 @@ function loadImage(area, no, preserveView = false) {
         tmpImg.onload = async () => {
           URL.revokeObjectURL(url0);
           let finalBlob = blob;
-          // Apply quantization only if color conversion is enabled (template feature removed)
-          if (imgColorConversionEnabled) {
-            finalBlob = await quantizeImageToPalette(tmpImg);
-          }
+          // Apply quantization (template feature removed)
+          finalBlob = await quantizeImageToPalette(tmpImg);
           // Persist quantized image as data URL for future sessions
           try {
             const reader = new FileReader();
@@ -8633,17 +8631,16 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
       const wy = localStorage.getItem('view.worldY');
       if (wx && wy) { areaInput.value = String(wx); noInput.value = String(wy); }
     } catch {}
-    // Restore images (supports multiple); falls back to legacy single image if list is empty
-    try { restoreImagesFromStorage(); } catch {}
-
     const saved = JSON.parse(localStorage.getItem('lastFetch') || 'null');
     if (saved && saved.mode === 'single') {
       areaInput.value = String(saved.coords[0].x);
       noInput.value = String(saved.coords[0].y);
-      loadImage(areaInput.value, noInput.value, true);
+      await loadImage(areaInput.value, noInput.value, true);
     } else if (areaInput.value && noInput.value) {
-      loadImage(areaInput.value, noInput.value, true);
+      await loadImage(areaInput.value, noInput.value, true);
     }
+    // Restore images (supports multiple); falls back to legacy single image if list is empty
+    try { restoreImagesFromStorage(); } catch {}
   } catch {}
     updateCounter();
     loadAccounts();

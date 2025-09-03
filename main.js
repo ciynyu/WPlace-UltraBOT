@@ -62,7 +62,7 @@ function parseUserAgent(uaString) {
 }
 
 
-let DEBUG = true; // Debug enabled by default
+let DEBUG = true;
 let DEBUG_MASK = !(process.env.DEBUG_MASK === '0' || process.env.DEBUG_MASK === 'false');
 let DEBUG_INBOUND_ENABLED = false; // Inbound logging permanently off
 function enableDebug() { DEBUG = true; }
@@ -309,7 +309,7 @@ function ensureDb() {
     try { fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify([], null, 2)); } catch {}
   }
   if (!fs.existsSync(SETTINGS_FILE)) {
-    try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ cf_clearance: '', worldX: null, worldY: null, updateIntervalMinutes: 5, enableAntiDetection: false }, null, 2)); } catch {}
+    try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ cf_clearance: '', worldX: null, worldY: null, updateIntervalMinutes: 5, enableAntiDetection: false, useProxy: false }, null, 2)); } catch {}
   } else {
     // Migrate old settings.json to include updateIntervalMinutes and enableAntiDetection if missing
     try {
@@ -320,6 +320,10 @@ function ensureDb() {
       }
       if (settings.enableAntiDetection == null) { // Add new setting for anti-detection toggle
         settings.enableAntiDetection = false; // Default to false
+        writeJson(SETTINGS_FILE, settings);
+      }
+      if (settings.useProxy == null) { // Add new setting for proxy usage
+        settings.useProxy = false; // Default to false
         writeJson(SETTINGS_FILE, settings);
       }
     } catch {}
@@ -706,7 +710,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
         body: payload,
         throwHttpErrors: false,
         decompress: true,
-        agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
+        agent: { https: HTTPS_AGENT },
         timeout: { request: 30000 }
       });
       const status = r && (r.statusCode || r.status) || 0;
@@ -734,7 +738,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
           'Content-Type': 'application/json',
           'Cookie': `cf_clearance=${cf_clearance || ''}; j=${token || ''}`
         },
-        agent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT
+        agent: HTTPS_AGENT
       };
       const req = https.request(options, (resp) => {
         let buf = '';
@@ -856,7 +860,7 @@ function startServer(port, host) {
     }
     // Receive token captured by extension and notify connected UIs
     if (parsed.pathname === '/api/token' && req.method === 'POST') {
-      const body = req.body; // Use the already read body
+      readJsonBody(req).then((body) => {
       const token = body && typeof body.token === 'string' ? body.token : '';
       const worldX = (body && (typeof body.worldX === 'string' || typeof body.worldX === 'number')) ? body.worldX : null;
       const worldY = (body && (typeof body.worldY === 'string' || typeof body.worldY === 'number')) ? body.worldY : null;
@@ -881,7 +885,7 @@ function startServer(port, host) {
         sseBroadcast('token', { token, worldX, worldY, userAgent, fingerprint });
         res.writeHead(204, { 'Access-Control-Allow-Origin': '*' });
         res.end();
-      // Remove .catch() because body has been handled at the beginning of the function
+      }).catch(() => { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ ok: false })); });
       return;
     }
 
@@ -1196,7 +1200,7 @@ function startServer(port, host) {
                 url: 'https://backend.wplace.live' + remotePath,
                 method: 'POST',
                 headers: {
-                  'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
+                  'User-Agent': 'Mozilla/5.0', // Set to fixed User-Agent for testing
                   'Accept': 'application/json, text/plain, */*',
                   'Origin': 'https://wplace.live',
                   'Referer': 'https://wplace.live/',
@@ -1206,7 +1210,7 @@ function startServer(port, host) {
                 body: payload,
                 throwHttpErrors: false,
                 decompress: true,
-                agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
+                agent: { https: HTTPS_AGENT }, // Temporarily disable proxy for testing
                 timeout: { request: 30000 }
               });
               const status = r && (r.statusCode || r.status) || 0;
@@ -1238,9 +1242,9 @@ function startServer(port, host) {
             port: 443,
             path: remotePath,
             method: 'POST',
-            agent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT,
+            agent: HTTPS_AGENT, // Temporarily disable proxy for testing
             headers: {
-              'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
+              'User-Agent': 'Mozilla/5.0', // Set to fixed User-Agent for testing
               'Accept': 'application/json, text/plain, */*',
               'Origin': 'https://wplace.live',
               'Referer': 'https://wplace.live/',
@@ -1594,9 +1598,41 @@ function startServer(port, host) {
             debugLog('WARNING', `Droplets for account ${acct.name} update set to null. Original value: ${me.droplets}`);
           }
         }
+
         if (me && Object.prototype.hasOwnProperty.call(me, 'extraColorsBitmap')) {
           const b = Number(me.extraColorsBitmap);
           acct.extraColorsBitmap = Number.isFinite(b) ? Math.floor(b) : null;
+        }
+        if (acct.autobuy === 'max' || acct.autobuy === 'rec') {
+          const price = 500;
+          const productId = acct.autobuy === 'max' ? 70 : 80;
+          const droplets = Number(acct.droplets || 0);
+          const qty = Math.floor(droplets / price);
+          if (qty > 0) {
+            try {
+              const ok = await purchaseProduct(cf, acct.token, productId, qty);
+              if (ok) {
+                try {
+                  const me2 = await fetchMe(cf, acct.token);
+                  if (me2 && me2.charges) {
+                    acct.pixelCount = Math.floor(Number(me2.charges.count));
+                    acct.pixelMax = Math.floor(Number(me2.charges.max));
+                    acct.active = true;
+                  } else {
+                    acct.active = false;
+                  }
+                  if (me2 && Object.prototype.hasOwnProperty.call(me2, 'droplets')) {
+                    const d2 = Number(me2.droplets);
+                    acct.droplets = Number.isFinite(d2) ? Math.floor(d2) : null;
+                  }
+                  if (me2 && Object.prototype.hasOwnProperty.call(me2, 'extraColorsBitmap')) {
+                    const b2 = Number(me2.extraColorsBitmap);
+                    acct.extraColorsBitmap = Number.isFinite(b2) ? Math.floor(b2) : null;
+                  }
+                } catch {}
+              }
+            } catch {}
+          }
         }
         const now = Date.now(); // Define now for this scope
         acct.lastRefresh = now; // Update last refresh time
