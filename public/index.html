@@ -7389,16 +7389,13 @@ async function refreshAccountById(accountId){
               try { updateStartEnabled(); } catch {}
               showToast(t('messages.tokenPastedFromExtension'), 'success', 1200);
               // Auto start on token if enabled AND the token is actually new
-              // This prevents auto-starting if the same token is re-captured without being cleared
-              const oldTokenValue = readyTokenInput.value;
-              if (autoStart && canStart && oldTokenValue !== token) { // Added condition oldTokenValue !== token
+              if (autoStart) { // Added condition oldTokenValue !== token
                   await new Promise(r => setTimeout(r, 50));
                   startBtn.click();
                   // No need to clear here, it will be cleared after successful paint
               }
-            } else {
-              try { localStorage.setItem('last.captured.token', token); } catch {}
-            }
+            } //else {
+//              try { localStorage.setItem('last.captured.token', token); } catch {}            }
           } catch {}
         });
       } catch {}
@@ -8451,7 +8448,7 @@ if (startBtn) {
                     console.log(`[WPlace-BOT] Account ${nextAccount.name} (ID: ${nextAccount.id}) is full of pixels. Automatically restarting paint process.`); // Info: Auto restart paint
                     await new Promise(resolve => setTimeout(resolve, 500)); // Wait a bit for UI to update
                     if (startBtn) {
-                      startBtn.click();
+                      //startBtn.click();
                       console.log("[DEBUG] Auto start: startBtn clicked to restart paint."); // Debug: Start clicked
                     }
                   } else {
