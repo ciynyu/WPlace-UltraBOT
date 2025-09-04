@@ -774,35 +774,32 @@
       background-position: center;
       background-size: 80% 80%;
     }
-    /* Styles for the eraser button */
-    #eraser-button {
-      position: fixed;
-      bottom: 12px;
-      left: 50%;
-      transform: translateX(calc(50% + 80px)); /* Adjust 80px based on color-palette width / 2 + gap */
-      background: rgba(17, 20, 24, 0.85);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      backdrop-filter: blur(6px);
-      padding: 8px;
+/* Styles for the eraser button */
+    #color-palette #eraser-button { /* Apply style specifically for eraser button inside color-palette */
+      background: rgba(17, 20, 24, 0.85); /* Keep background for visibility if outside transparent */
+      border: 1px solid rgba(255,255,255,0.15); /* Match palette swatch border */
+      border-radius: 4px; /* Match palette swatch border-radius */
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2); /* Match palette swatch box-shadow */
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1001;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.35);
-      width: 44px; /* Adjust as needed */
-      height: 44px; /* Adjust as needed */
       cursor: pointer;
+      width: 18px; /* Set width to match palette swatches */
+      height: 18px; /* Set height to match palette swatches */
+      padding: 0; /* Remove padding */
+      margin: 0; /* Remove margin */
     }
 
-    #eraser-button.active {
+    #color-palette #eraser-button.active {
+      outline: 2px solid #22d3ee;
+      outline-offset: 0;
       border-color: #22d3ee;
       box-shadow: 0 0 0 2px rgba(34,211,238,0.25);
     }
 
-    #eraser-button svg {
-      width: 24px;
-      height: 24px;
+    #color-palette #eraser-button svg {
+      width: 14px; /* Adjust SVG size to fit within the new button size */
+      height: 14px; /* Adjust SVG size to fit within the new button size */
     }
     
     #lang-switch {
@@ -1254,10 +1251,6 @@
  
   <div id="app-toast-container" aria-live="polite" aria-atomic="true"></div>
   <div id="color-palette" aria-label="Renk paleti" role="group" data-i18n-aria-label="labels.colorPalette"></div>
-   <!-- Eraser Button -->
-   <button id="eraser-button" class="btn btn-lg btn-square shadow-md" title="Tẩy">
-     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" class="size-5"><path d="M690-240h190v80H610l80-80Zm-500 80-85-85q-23-23-23.5-57t22.5-58l440-456q23-24 56.5-24t56.5 23l199 199q23 23 23 57t-23 57L520-160H190Zm296-80 314-322-198-198-442 456 64 64h262Zm-6-240Z"/></svg>
-   </button>
   <div id="palette-mode" class="palette-mode-wrap" aria-label="Palette mode" style="bottom:76px; left:50%; transform:translateX(-50%); visibility:hidden;">
     <span id="palette-mode-label-left" class="palette-mode-label active" data-i18n="paletteMode.premium">Use premium color</span>
     <button id="palette-mode-toggle" class="palette-mode-track" type="button" role="switch" aria-checked="true" aria-label="Palette mode"><span class="palette-mode-knob"></span></button>
@@ -1488,19 +1481,33 @@
       };
     }
 
-    // Moved from inside async IIFE for global accessibility and clarity
-    function calculateTotalDroplets() {
-        let totalDroplets = 0;
-        if (Array.isArray(accountsData)) {
-            for (let i = 0; i < accountsData.length; i++) {
-                const account = accountsData[i];
-                if (account && account.active !== false && Number.isFinite(account.droplets)) {
-                    totalDroplets += account.droplets;
-                }
+function formatTime(ms) {
+    if (ms < 0) return t('time.recharged');
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return t('time.days', { d: days, h: hours % 24, m: minutes % 60 });
+    if (hours > 0) return t('time.hours', { h: hours % 24, m: minutes % 60, s: seconds % 60 });
+    if (minutes > 0) return t('time.minutes', { m: minutes % 60, s: seconds % 60 });
+    if (seconds > 0) return t('time.seconds', { s: seconds % 60 });
+    return t('time.now');
+}
+
+// Moved from inside async IIFE for global accessibility and clarity
+function calculateTotalDroplets() {
+    let totalDroplets = 0;
+    if (Array.isArray(accountsData)) {
+        for (let i = 0; i < accountsData.length; i++) {
+            const account = accountsData[i];
+            if (account && account.active !== false && Number.isFinite(account.droplets)) {
+                totalDroplets += account.droplets;
             }
         }
-        return totalDroplets;
     }
+    return totalDroplets;
+}
 
     function updateTotalDropletsDisplay() {
         const totalDropletsEl = document.getElementById('total-droplets-info');
@@ -2197,14 +2204,71 @@
         playNotifySound();
       }
     }
-    function checkFullnessNotify(){
-      try {
-        const c = Number(pixelPowerEl && pixelPowerEl.getAttribute('data-count') || '0');
-        const m = Number(pixelPowerEl && pixelPowerEl.getAttribute('data-max') || '0');
-        const ratio = m > 0 ? (c / m) : 0;
-        if (ratio >= 0.90) maybeNotifyFullnessNow();
-      } catch {}
+async function checkFullnessNotify() {
+    try {
+        console.log("[DEBUG] Starting checkFullnessNotify..."); // Debug: Function start
+        const currentTime = Date.now();
+        console.log(`[DEBUG] Current Time: ${new Date(currentTime).toISOString()}`); // Debug: Current time
+
+        if (!Array.isArray(accountsData) || accountsData.length === 0) {
+            console.log("[DEBUG] No accounts data or empty, skipping fullness check."); // Debug: No accounts
+            return;
+        }
+
+        for (let i = 0; i < accountsData.length; i++) {
+            const acc = accountsData[i];
+            console.log(`[DEBUG] Processing account: ${acc.name} (ID: ${acc.id})`); // Debug: Account processing
+
+            // Skip inactive accounts or accounts without a token
+            if (!acc || acc.active === false || !acc.token) {
+                console.log(`[DEBUG] Skipping inactive/invalid account: ${acc.name}`); // Debug: Skip inactive
+                continue;
+            }
+
+            // Main logic for calculating and refreshing accounts
+            if (acc.pixelCount < acc.pixelMax) { // If account is not full
+                console.log(`[DEBUG] Account ${acc.name} is not full. Pixels: ${acc.pixelCount}/${acc.pixelMax}`); // Debug: Account not full
+                let timeToRechargeMs = 0;
+
+                if (acc.pixelCount === 0) {
+                    // If pixelCount is 0, estimate full recharge time from zero
+                    timeToRechargeMs = acc.pixelMax * 30 * 1000; // pixelMax * 30 seconds/pixel * 1000ms/second
+                    // If estimatedFullRechargeTime is not set, or pixelCount has changed significantly
+                    // and we are not waiting for a refresh, recalculate and set it.
+                    if (!acc.estimatedFullRechargeTime || (acc.lastPixelCount !== acc.pixelCount && acc.pixelCount > 0)) {
+                        acc.estimatedFullRechargeTime = currentTime + timeToRechargeMs;
+                        console.log(`[DEBUG] Setting/Updating estimatedFullRechargeTime for ${acc.name}: ${new Date(acc.estimatedFullRechargeTime).toISOString()} (Pixels needed: ${acc.pixelMax - acc.pixelCount})`); // Debug: Initial/Update estimate
+                    } else {
+                        console.log(`[DEBUG] EstimatedFullRechargeTime for ${acc.name} not updated (pixelCount unchanged or already set): ${new Date(acc.estimatedFullRechargeTime).toISOString()}`); // Debug: No update
+                    }
+                }
+
+                // If the estimated time to full has been reached or exceeded AND not already refreshing
+                if (currentTime >= acc.estimatedFullRechargeTime && !acc.isRefreshing) {
+                    console.log(`[WPlace-BOT] Account ${acc.name} (ID: ${acc.id}) has reached or exceeded the estimated full time. Requesting refresh.`); // Info: Refreshing
+                    await refreshAccountById(acc.id); // Send refresh request
+                    // After refresh, acc.pixelCount will be updated by loadAccounts()
+                    // and the estimated time will be recalculated in the next checkFullnessNotify() run
+                } else if (acc.isRefreshing) {
+                    console.log(`[DEBUG] Account ${acc.name} is currently refreshing, skipping.`); // Debug: Already refreshing
+                }
+                else {
+                    console.log(`[DEBUG] Account ${acc.name} not yet full. Estimated full at: ${acc.estimatedFullRechargeTime ? new Date(acc.estimatedFullRechargeTime).toISOString() : 'N/A'}`); // Debug: Not full yet
+                }
+            } else { // Account is full (acc.pixelCount === acc.pixelMax)
+                console.log(`[DEBUG] Account ${acc.name} is already full. Pixels: ${acc.pixelCount}/${acc.pixelMax}`); // Debug: Account full
+                // Clear estimatedFullRechargeTime if the account is full, and if it has a value
+                if (acc.estimatedFullRechargeTime !== null) { // Only set to null if it's not already null
+                    acc.estimatedFullRechargeTime = null;
+                    console.log(`[DEBUG] Clearing estimatedFullRechargeTime for ${acc.name} as it is full.`); // Debug: Clear estimate
+                }
+            }
+        }
+    } catch (e) {
+        console.error("[WPlace-BOT] Error in checkFullnessNotify:", e); // Error: Function error
+        console.error("[DEBUG] Stack trace for checkFullnessNotify error:", e.stack); // Debug: Stack trace
     }
+}
     try { setInterval(() => { checkFullnessNotify(); }, FULLNESS_NOTIFY_PERIOD_MS); } catch {}
     const accountsModal = document.getElementById('accounts-modal');
     const accountsClose = document.getElementById('accounts-close');
@@ -6243,7 +6307,11 @@ function loadImage(area, no, preserveView = false) {
         if (aActive === bActive) return 0;
         return aActive ? 1 : -1; // Inactive first
       }) : [];
-      accountsData = sortedRows.slice();
+      // Đảm bảo mỗi đối tượng tài khoản có thuộc tính estimatedFullRechargeTime được khởi tạo
+      accountsData = sortedRows.map(acc => ({
+        ...acc,
+        estimatedFullRechargeTime: acc.estimatedFullRechargeTime || null // Khởi tạo nếu chưa có
+      }));
       try { recomputeActivePalette(); } catch {}
       accountsTbody.innerHTML = '';
       sortedRows.forEach(row => {
@@ -6320,10 +6388,7 @@ function loadImage(area, no, preserveView = false) {
         checkBtn.textContent = t('buttons.checkPixels');
         checkBtn.addEventListener('click', async () => {
           try {
-            const res = await fetch('/api/accounts/' + row.id + '/refresh', { method: 'POST' });
-            if (!res.ok) return;
-            const updated = await res.json();
-            await loadAccounts();
+            await refreshAccountById(row.id); // Gọi refreshAccountById
           } catch {}
         });
         const shopBtn = document.createElement('button');
@@ -6374,11 +6439,11 @@ function loadImage(area, no, preserveView = false) {
       });
       
       try {
-        if (Array.isArray(sortedRows) && pixelPowerEl) {
+        if (Array.isArray(accountsData) && pixelPowerEl) { // Đổi sortedRows thành accountsData
           let totalCount = 0;
           let totalMax = 0;
-          for (let i = 0; i < sortedRows.length; i++) {
-            const r = sortedRows[i];
+          for (let i = 0; i < accountsData.length; i++) { // Đổi sortedRows thành accountsData
+            const r = accountsData[i]; // Đổi sortedRows thành accountsData
             const isActive = r && r.active !== false && !!r.token;
             if (!isActive) continue;
             const cRaw = Number(r.pixelCount);
@@ -6398,7 +6463,24 @@ function loadImage(area, no, preserveView = false) {
       try {
         const res = await fetch('/api/accounts');
         const data = await res.json();
-        if (Array.isArray(data)) renderAccountsTable(data);   
+        // Không gọi renderAccountsTable ở đây, nó sẽ được gọi sau khi fetch settings
+        // Điều này đảm bảo accountsData đã có estimatedFullRechargeTime trước khi render
+        if (Array.isArray(data)) {
+            // Update accountsData before passing to renderAccountsTable
+            accountsData = data.map(acc => {
+                const existingAcc = accountsData.find(e => e.id === acc.id);
+                const newAcc = {
+                    ...acc,
+                    // Nếu tài khoản đã đầy, đảm bảo estimatedFullRechargeTime được reset.
+                    // Nếu không, giữ nguyên giá trị từ existingAcc hoặc từ acc mới nếu chưa có.
+                    estimatedFullRechargeTime: (acc.pixelCount === acc.pixelMax) ? null : (existingAcc ? existingAcc.estimatedFullRechargeTime : acc.estimatedFullRechargeTime || null),
+                    lastPixelCount: acc.pixelCount, // Store current pixelCount as lastPixelCount for change detection
+                    isRefreshing: existingAcc ? existingAcc.isRefreshing : false // Add isRefreshing flag
+                };
+                return newAcc;
+            });
+            renderAccountsTable(accountsData);
+        }
         updateTotalDropletsDisplay(); // Cập nhật tổng droplets sau khi render bảng tài khoản
 
         // Fetch settings and populate update interval input
@@ -6414,12 +6496,32 @@ function loadImage(area, no, preserveView = false) {
         }
       } catch {}
     }
-    async function refreshAccountById(accountId){
-      try {
-        await fetch('/api/accounts/' + encodeURIComponent(String(accountId)) + '/refresh', { method: 'POST' });
-      } catch {}
-      try { await loadAccounts(); } catch {}
+async function refreshAccountById(accountId){
+    const account = accountsData.find(acc => acc.id === accountId);
+    if (account) {
+        account.isRefreshing = true; // Set flag to true when starting refresh
     }
+    try {
+        console.log(`[DEBUG] Attempting to refresh account with ID: ${accountId}`); // Debug: Refresh attempt
+        const res = await fetch('/api/accounts/' + encodeURIComponent(String(accountId)) + '/refresh', { method: 'POST' });
+        // After successful refresh, call loadAccounts to update data and trigger checkFullnessNotify
+        if (res.ok) {
+            console.log(`[DEBUG] Account ${accountId} refreshed successfully. Loading all accounts to update state.`); // Debug: Success
+            await loadAccounts(); // Reload all accounts after successful refresh
+            // checkFullnessNotify() will automatically run via its established setInterval
+        } else {
+            console.error(`[ERROR] Failed to refresh account ${accountId}: ${res.statusText}`); // Error: Failed refresh
+            console.error(`[DEBUG] Refresh failed response status: ${res.status}`); // Debug: Status
+        }
+    } catch (e) {
+        console.error(`[ERROR] Error refreshing account ${accountId}:`, e); // Error: Exception during refresh
+        console.error("[DEBUG] Stack trace for refreshAccountById error:", e.stack); // Debug: Stack trace
+    } finally {
+        if (account) {
+            account.isRefreshing = false; // Always reset flag
+        }
+    }
+}
     const BULK_REFRESH_PERIOD_MS = 90 * 1000;
     let lastBulkRefreshAt = 0;
     let bulkRefreshInFlight = false;
@@ -7286,15 +7388,14 @@ function loadImage(area, no, preserveView = false) {
               readyTokenInput.value = token;
               try { updateStartEnabled(); } catch {}
               showToast(t('messages.tokenPastedFromExtension'), 'success', 1200);
-              // Auto start on token if enabled
-              try {
-                const startBtn = document.getElementById('start');
-                const canStart = startBtn && !startBtn.disabled;
-                if (autoStart && canStart) {
+              // Auto start on token if enabled AND the token is actually new
+              // This prevents auto-starting if the same token is re-captured without being cleared
+              const oldTokenValue = readyTokenInput.value;
+              if (autoStart && canStart && oldTokenValue !== token) { // Added condition oldTokenValue !== token
                   await new Promise(r => setTimeout(r, 50));
                   startBtn.click();
-                }
-              } catch {}
+                  // No need to clear here, it will be cleared after successful paint
+              }
             } else {
               try { localStorage.setItem('last.captured.token', token); } catch {}
             }
@@ -7326,8 +7427,8 @@ const autoStartTrack = document.getElementById('auto-start-toggle');
     // Auto Paint state variables moved here for global scope
     let brokenPixelPaintEnabled = false;
     let priorityColorPaintEnabled = false;
-    let priorityColors = [7]; // Stores color IDs
-    let brokenPixelPriorityColors = [7]; // Stores broken pixel priority color IDs
+    let priorityColors = []; // Stores color IDs
+    let brokenPixelPriorityColors = []; // Stores broken pixel priority color IDs
     let minizineToDetectThreshold = 4; // Default value
     let isPickingColorMode = false; // New state for pick color tool
     let isPickingBrokenPixelColorMode = false; // New state for broken pixel pick color tool
@@ -7636,31 +7737,72 @@ const autoStartTrack = document.getElementById('auto-start-toggle');
       } catch {}
     }
 
-    function pickNextBestAccountId(excludeIds = []){
-      try {
-        const excludeSet = new Set((excludeIds||[]).map(x => String(x)));
+function pickNextBestAccountId(excludeIds = []){
+    try {
+        console.log("[DEBUG] pickNextBestAccountId: Starting selection process."); // Debug: Function start
+        const excludeSet = new Set((excludeIds || []).map(x => String(x)));
+        console.log("[DEBUG] pickNextBestAccountId: Excluded IDs:", Array.from(excludeSet)); // Debug: Excluded IDs
         const list = [];
         accountsData.forEach(row => {
-          const isActive = row && row.active !== false && !!row.token;
-          const countRaw = Number(row && row.pixelCount);
-          const maxRaw = Number(row && row.pixelMax);
-          const valid = Number.isFinite(countRaw) && Number.isFinite(maxRaw) && maxRaw > 0;
-          if (!isActive || !valid) return;
-          const idStr = String(row.id);
-          const ratio = (maxRaw > 0 ? (countRaw / maxRaw) : -1);
-          list.push({ id: row.id, idStr, ratio, count: Math.floor(countRaw), max: Math.floor(maxRaw) });
+            const isActive = row && row.active !== false && !!row.token;
+            const countRaw = Number(row && row.pixelCount);
+            const maxRaw = Number(row && row.pixelMax);
+            const valid = Number.isFinite(countRaw) && Number.isFinite(maxRaw) && maxRaw > 0;
+
+            if (!isActive || !valid) {
+                console.log(`[DEBUG] pickNextBestAccountId: Skipping invalid/inactive row: ${row ? row.name : 'N/A'}`); // Debug: Skip invalid/inactive
+                return;
+            }
+            if (excludeSet.has(String(row.id))) { // Exclude accounts already used in the current paint session
+                console.log(`[DEBUG] pickNextBestAccountId: Skipping excluded account: ${row.name}`); // Debug: Skip excluded
+                return;
+            }
+
+            const idStr = String(row.id);
+            list.push({ id: row.id, idStr, count: Math.floor(countRaw), max: Math.floor(maxRaw) });
         });
+        console.log("[DEBUG] pickNextBestAccountId: Candidate accounts before sorting:", list); // Debug: Candidates
+
         list.sort((a, b) => {
-          if (b.ratio !== a.ratio) return b.ratio - a.ratio;
-          if (b.count !== a.count) return b.count - a.count;
-          return b.max - a.max;
+            // Priority 1: Accounts that are fully recharged (count === max)
+            const aIsFull = (a.count === a.max);
+            const bIsFull = (b.count === b.max);
+            if (aIsFull && !bIsFull) {
+                console.log(`[DEBUG] pickNextBestAccountId: Prioritizing ${a.id} (full) over ${b.id}`); // Debug: Full priority
+                return -1;
+            }
+            if (!aIsFull && bIsFull) {
+                console.log(`[DEBUG] pickNextBestAccountId: Prioritizing ${b.id} (full) over ${a.id}`); // Debug: Full priority
+                return 1;
+            }
+
+            // Priority 2 (If neither or both are full): Sort by current pixel count in descending order
+            if (b.count !== a.count) {
+                console.log(`[DEBUG] pickNextBestAccountId: Sorting by pixel count: ${b.id} (${b.count}) vs ${a.id} (${a.count})`); // Debug: Pixel count sort
+                return b.count - a.count;
+            }
+
+            // Priority 3: Sort by pixelMax in descending order (prioritize accounts with higher potential)
+            console.log(`[DEBUG] pickNextBestAccountId: Sorting by pixelMax: ${b.id} (${b.max}) vs ${a.id} (${a.max})`); // Debug: Max pixel sort
+            return b.max - a.max;
         });
+        console.log("[DEBUG] pickNextBestAccountId: Candidate accounts after sorting:", list); // Debug: Sorted candidates
+
+        // Only return accounts with pixelCount > 0
         for (let i = 0; i < list.length; i++) {
-          if (!excludeSet.has(list[i].idStr)) return list[i].id;
+            if (list[i].count > 0) {
+                console.log(`[DEBUG] pickNextBestAccountId: Selected best account: ${list[i].id} with ${list[i].count} pixels.`); // Debug: Selected
+                return list[i].id;
+            }
         }
+        console.log("[DEBUG] pickNextBestAccountId: No suitable account found with pixels > 0."); // Debug: No suitable account
         return null;
-      } catch { return null; }
+    } catch (e) {
+        console.error("[ERROR] pickNextBestAccountId: Error during selection process:", e); // Error: Exception
+        console.error("[DEBUG] Stack trace for pickNextBestAccountId error:", e.stack); // Debug: Stack trace
+        return null;
     }
+}
 
     // Single-account mode: we no longer auto-select on open; user picks explicitly.
 
@@ -8040,15 +8182,44 @@ const autoStartTrack = document.getElementById('auto-start-toggle');
       }
       return added;
     }
-    function getSelectedAccountsSortedByCapacityDesc() {
-      const rows = [];
-      for (let i = 0; i < readySelectedAccountIds.length; i++) {
-        const a = getAccountById(readySelectedAccountIds[i]);
-        if (a && typeof a.token === 'string' && a.token && a.active !== false) rows.push(a);
-      }
-      rows.sort((a, b) => (Number(b.pixelCount)||0) - (Number(a.pixelCount)||0));
-      return rows;
+function getSelectedAccountsSortedByCapacityDesc() {
+    console.log("[DEBUG] getSelectedAccountsSortedByCapacityDesc: Starting sort process."); // Debug: Function start
+    const rows = [];
+    // Only get selected accounts for sorting and display
+    for (let i = 0; i < readySelectedAccountIds.length; i++) {
+        const acc = getAccountById(readySelectedAccountIds[i]);
+        if (acc && acc.active !== false && acc.token) {
+            rows.push(acc);
+        }
     }
+    console.log("[DEBUG] getSelectedAccountsSortedByCapacityDesc: Accounts before sorting:", rows); // Debug: Before sort
+
+    rows.sort((a, b) => {
+        // Priority 1: Accounts that are fully recharged (count === max)
+        const aIsFull = (a.pixelCount === a.pixelMax);
+        const bIsFull = (b.pixelCount === b.pixelMax);
+        if (aIsFull && !bIsFull) {
+            console.log(`[DEBUG] getSelectedAccountsSortedByCapacityDesc: Prioritizing ${a.id} (full) over ${b.id}`); // Debug: Full priority
+            return -1;
+        }
+        if (!aIsFull && bIsFull) {
+            console.log(`[DEBUG] getSelectedAccountsSortedByCapacityDesc: Prioritizing ${b.id} (full) over ${a.id}`); // Debug: Full priority
+            return 1;
+        }
+
+        // Priority 2: Sort by current pixel count in descending order
+        if (b.pixelCount !== a.pixelCount) {
+            console.log(`[DEBUG] getSelectedAccountsSortedByCapacityDesc: Sorting by pixel count: ${b.id} (${b.pixelCount}) vs ${a.id} (${a.pixelCount})`); // Debug: Pixel count sort
+            return b.pixelCount - a.pixelCount;
+        }
+
+        // Priority 3: Sort by pixelMax in descending order
+        console.log(`[DEBUG] getSelectedAccountsSortedByCapacityDesc: Sorting by pixelMax: ${b.id} (${b.pixelMax}) vs ${a.id} (${a.pixelMax})`); // Debug: Max pixel sort
+        return b.pixelMax - a.pixelMax;
+    });
+    console.log("[DEBUG] getSelectedAccountsSortedByCapacityDesc: Accounts after sorting:", rows); // Debug: After sort
+    return rows;
+}
 
     async function postBatch(area, no, colors, coords, t, jToken) {
       try {
@@ -8225,6 +8396,7 @@ if (startBtn) {
             offset += take;
             usedIds.push(acc.id);
             try { await refreshAccountById(acc.id); } catch {}
+            updateReadyPixelForSelectedAccounts();
           }
           if (offset > 0) paintedAny = true;
           if (offset < total && !hadRequestError) missingTotal += (total - offset);
@@ -8234,7 +8406,7 @@ if (startBtn) {
           try { clearAllReadySelections(); } catch {}
           try { readyGlobalMode = false; } catch {}
           if (!autoMode) {
-            try { resetReadyNow(); } catch {}
+            //try { resetReadyNow(); } catch {}
           }
           try { updateStartEnabled(); } catch {}
         }
@@ -8244,25 +8416,63 @@ if (startBtn) {
         try { await loadAccounts(); } catch {}
         try { updateReadySelectionLabel(); } catch {}
         render();
-        // Auto mode: después de pintar, selecciona la siguiente cuenta y auto selecciona píxeles
+        // Auto mode: sau khi vẽ xong, chọn tài khoản tiếp theo và tự động chọn pixel
         if (autoMode && paintedAny && !hadRequestError) {
+          console.log("[DEBUG] Auto mode enabled, painted pixels, and no request errors. Proceeding with auto-selection."); // Debug: Auto mode active
           try {
             await loadAccounts();
-            try { renderReadyAccountList(); } catch {}
+            console.log("[DEBUG] Auto mode: Accounts reloaded after painting."); // Debug: Accounts reloaded
+            try { renderReadyAccountList(); } catch (e) { console.error("[ERROR] Auto mode: Error rendering ready account list:", e); } // Error: Render error
             updateReadyPixelForSelectedAccounts();
+            console.log("[DEBUG] Auto mode: Ready pixel count updated."); // Debug: Ready pixel update
             const nextId = pickNextBestAccountId(usedIds);
+            console.log(`[DEBUG] Auto mode: Next best account ID picked: ${nextId}`); // Debug: Next account ID
             if (nextId != null) {
               readySelectedAccountIds = [nextId];
-              try { renderReadyAccountList(); } catch {}
+              console.log(`[DEBUG] Auto mode: Selected next account for painting: ${nextId}`); // Debug: Account selected
+              try { renderReadyAccountList(); } catch (e) { console.error("[ERROR] Auto mode: Error rendering ready account list after next selection:", e); } // Error: Render error
               updateReadyPixelForSelectedAccounts();
-              try { await new Promise(resolve => setTimeout(resolve, didReload ? 50 : 300)); } catch {}
-              if (autoSelectBtn) { autoSelectDeleteMode = false; autoSelectBtn.click(); }
+              console.log("[DEBUG] Auto mode: Ready pixel count updated for newly selected account."); // Debug: Ready pixel update
+              try { await new Promise(resolve => setTimeout(resolve, didReload ? 50 : 300)); } catch (e) { console.error("[ERROR] Auto mode: Error in setTimeout promise:", e); } // Error: Timeout error
+              if (autoSelectBtn) {
+                autoSelectDeleteMode = false;
+                autoSelectBtn.click();
+                console.log("[DEBUG] Auto mode: autoSelectBtn clicked to select pixels."); // Debug: Auto select clicked
+              }
+              
+              // Logic for automatically restarting paint if the account is full
+              if (autoStart) {
+                console.log("[DEBUG] Auto start enabled. Checking if selected account is full to restart paint."); // Debug: Auto start enabled
+                const nextAccount = getAccountById(nextId);
+                // Ensure autoSelectBtn.click() is only called when a new account is selected by pickNextBestAccountId with pixelCount > 0
+                if (nextAccount && nextAccount.pixelCount > 0) {
+                  console.log(`[DEBUG] Next account (${nextAccount.id}) has pixels: ${nextAccount.pixelCount}`); // Debug: Next account pixels
+                  if (nextAccount.pixelCount === nextAccount.pixelMax) { // Only restart if the account is full
+                    console.log(`[WPlace-BOT] Account ${nextAccount.name} (ID: ${nextAccount.id}) is full of pixels. Automatically restarting paint process.`); // Info: Auto restart paint
+                    await new Promise(resolve => setTimeout(resolve, 500)); // Wait a bit for UI to update
+                    if (startBtn) {
+                      startBtn.click();
+                      console.log("[DEBUG] Auto start: startBtn clicked to restart paint."); // Debug: Start clicked
+                    }
+                  } else {
+                    console.log(`[DEBUG] Next account (${nextAccount.id}) is not full, not restarting paint.`); // Debug: Not full, no restart
+                  }
+                } else {
+                  console.log("[DEBUG] No next account or next account has 0 pixels, not attempting to restart paint."); // Debug: No next account or zero pixels
+                }
+              }
+            } else {
+              console.log("[DEBUG] Auto mode: No next best account found with pixels > 0. Stopping auto-paint cycle."); // Debug: No next account
             }
-          } catch {}
+          } catch (e) {
+            console.error("[ERROR] Auto mode: An error occurred during auto-selection and restart process:", e); // Error: Auto mode error
+            console.error("[DEBUG] Stack trace for auto mode error:", e.stack); // Debug: Stack trace
+          }
         }
       } finally {
         isPainting = false;
         scheduleBackgroundRefresh();
+        console.log("[DEBUG] Paint process finished. Scheduling background refresh."); // Debug: Paint finished
       }
     })();
 /* else {
@@ -9081,15 +9291,16 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
     }
 
     function loadPriorityColors() {
-      priorityColors = [7]; // Ghi đè cho mục đích debug
-      // try {
-      //   const saved = localStorage.getItem(PRIORITY_COLORS_STORAGE_KEY);
-      //   if (saved) {
-      //     priorityColors = JSON.parse(saved);
-      //   }
-      // } catch {
-      //   priorityColors = [];
-      // }
+      try {
+        const saved = localStorage.getItem(PRIORITY_COLORS_STORAGE_KEY);
+        if (saved) {
+          priorityColors = JSON.parse(saved);
+        } else {
+          priorityColors = [];
+        }
+      } catch {
+        priorityColors = [];
+      }
     }
 
     function renderPriorityColors() {
@@ -9167,15 +9378,16 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
     }
 
     function loadBrokenPixelColors() {
-      brokenPixelPriorityColors = [7]; // Ghi đè cho mục đích debug
-      // try {
-      //   const saved = localStorage.getItem(BROKEN_PIXEL_COLORS_STORAGE_KEY);
-      //   if (saved) {
-      //     brokenPixelPriorityColors = JSON.parse(saved);
-      //   }
-      // } catch {
-      //   brokenPixelPriorityColors = [];
-      // }
+      try {
+        const saved = localStorage.getItem(BROKEN_PIXEL_COLORS_STORAGE_KEY);
+        if (saved) {
+          brokenPixelPriorityColors = JSON.parse(saved);
+        } else {
+          brokenPixelPriorityColors = [];
+        }
+      } catch {
+        brokenPixelPriorityColors = [];
+      }
     }
 
     function renderBrokenPixelColors() {
@@ -9261,6 +9473,11 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
   </script>
 </body>
 </html> 
+
+
+
+
+
 
 
 

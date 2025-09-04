@@ -177,6 +177,16 @@
     "noColorAtLocation": "Không có màu tại vị trí này.",
     "duplicatesRemoved": "Đã xóa các bản sao."
   },
+  "time": {
+    "recharged": "Đã nạp đầy",
+    "days": "{d} ngày {h} giờ {m} phút",
+    "hours": "{h} giờ {m} phút {s} giây",
+    "minutes": "{m} phút {s} giây",
+    "seconds": "{s} giây",
+    "now": "Bây giờ",
+    "full": "Đầy đủ",
+    "calculating": "Đang tính..."
+  },
   "shop": {
     "premiumTitle": "Màu Premium",
     "purchased": "Màu đã mua",

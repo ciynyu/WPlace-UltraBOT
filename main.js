@@ -62,7 +62,7 @@ function parseUserAgent(uaString) {
 }
 
 
-let DEBUG = true;
+let DEBUG = false;
 let DEBUG_MASK = !(process.env.DEBUG_MASK === '0' || process.env.DEBUG_MASK === 'false');
 let DEBUG_INBOUND_ENABLED = false; // Inbound logging permanently off
 function enableDebug() { DEBUG = true; }
@@ -860,7 +860,7 @@ function startServer(port, host) {
     }
     // Receive token captured by extension and notify connected UIs
     if (parsed.pathname === '/api/token' && req.method === 'POST') {
-      readJsonBody(req).then((body) => {
+      const body = req.body; // Use the already read body
       const token = body && typeof body.token === 'string' ? body.token : '';
       const worldX = (body && (typeof body.worldX === 'string' || typeof body.worldX === 'number')) ? body.worldX : null;
       const worldY = (body && (typeof body.worldY === 'string' || typeof body.worldY === 'number')) ? body.worldY : null;
@@ -885,7 +885,7 @@ function startServer(port, host) {
         sseBroadcast('token', { token, worldX, worldY, userAgent, fingerprint });
         res.writeHead(204, { 'Access-Control-Allow-Origin': '*' });
         res.end();
-      }).catch(() => { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ ok: false })); });
+      // Remove .catch() because body has been handled at the beginning of the function
       return;
     }
 
