@@ -96,9 +96,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg && msg.type === 'wplace_token_found') { // Removed check for msg.token because cfClearance might be the primary data
+  if (msg && msg.type === 'wplace_token_found' && msg.token) { // Removed check for msg.token because cfClearance might be the primary data
     const tokenData = {
       token: String(msg.token || '') || null, // Ensure token is string or null
+      xpaw: msg.xpaw || null,
+      fp: msg.xpaw || null,
       worldX: msg.worldX || null,
       worldY: msg.worldY || null,
       cfClearance: msg.cfClearance || null, // Add cfClearance
@@ -106,16 +108,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       timestamp: Date.now()
     };
 
-    chrome.storage.local.get(['wplace_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'tokenQueue'], async (result) => {
+    chrome.storage.local.get(['wplace_token', 'wplace_xpaw_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'tokenQueue'], async (result) => {
       const currentToken = result.wplace_token;
+      const currentxpaw = result.wplace_xpaw_token;
       const currentWorldX = result.wplace_world_x;
       const currentWorldY = result.wplace_world_y;
       const currentCfClearance = result.wplace_cf_clearance; // Get current cfClearance from storage
 
-      // Only update storage and queue if the new token/cfClearance is different or coordinates change
-      if (currentToken !== tokenData.token || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(tokenData.worldY) || currentCfClearance !== tokenData.cfClearance) {
+      // Only update storage and queue if the new token/cfClearance is different or coordinates changetokenData
+      if (currentToken !== tokenData.token || currentxpaw !== tokenData.xpaw || currentfp !== tokenData.fp || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(token.worldY) || currentCfClearance !== tokenData.cfClearance ) {
         const toStore = {};
         if (tokenData.token) toStore.wplace_token = tokenData.token;
+        if (tokenData.xpaw) toStore.wplace_xpaw_token = msg.xpaw;
         if (tokenData.worldX) toStore.wplace_world_x = String(tokenData.worldX);
         if (tokenData.worldY) toStore.wplace_world_y = String(tokenData.worldY);
         if (tokenData.cfClearance) toStore.wplace_cf_clearance = tokenData.cfClearance; // Store cfClearance

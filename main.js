@@ -5,6 +5,15 @@ const https = require('https');
 const zlib = require('zlib');
 const url = require('url');
 
+function debounce(func, delay) {
+  let timeout;
+  return function(...args) {
+    const context = this;
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(context, args), delay);
+  };
+}
+
 const PROXY_FILE = path.resolve(process.cwd(), 'proxies.txt');
 let activeProxies = []; // Stores the loaded proxies
 let useProxy = false; // Flag to enable/disable proxy usage based on proxies.txt content
@@ -95,23 +104,39 @@ function loadProxies() {
       fs.writeFileSync(PROXY_FILE, '', 'utf8');
     }
     const data = fs.readFileSync(PROXY_FILE, 'utf8');
-    const proxies = data.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    if (proxies.length > 0) {
-      activeProxies = proxies;
+    const rawProxies = data.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    activeProxies = [];
+    for (let proxyUrl of rawProxies) {
+      // If the proxy string doesn't have a schema, assume it's HTTP and prepend "http://"
+      if (!proxyUrl.includes('://')) {
+        proxyUrl = `http://${proxyUrl}`;
+      }
+      try {
+        new URL(proxyUrl); // Validate URL format
+        activeProxies.push(proxyUrl);
+      } catch (e) {
+        debugLog('ERROR', `Invalid proxy URL skipped: ${proxyUrl} (${e.message}). Ensure it has a valid schema (e.g., http://, https://, socks5://) or is in IP:Port format.`);
+      }
+    }
+
+    if (activeProxies.length > 0) {
       useProxy = true;
-      debugLog('INFO', `Loaded ${activeProxies.length} proxies from ${PROXY_FILE}`);
+      console.log('[INFO]', `Loaded ${activeProxies.length} valid proxies from ${PROXY_FILE}`);
     } else {
-      debugLog('INFO', `No proxies found in ${PROXY_FILE}. Proxy usage disabled.`);
+      useProxy = false; // Ensure useProxy is false if no valid proxies are loaded
+      console.log('[INFO]', `No valid proxies found in ${PROXY_FILE}. Proxy usage disabled.`);
     }
   } catch (e) {
-    debugLog('ERROR', `Failed to load/create proxies from ${PROXY_FILE}: ${e.message}`);
+    console.error('[ERROR]', `Failed to load/create proxies from ${PROXY_FILE}: ${e.message}`);
   }
 }
 
 function getRandomProxy() {
   if (activeProxies.length === 0) return null;
   const randomIndex = Math.floor(Math.random() * activeProxies.length);
-  return activeProxies[randomIndex];
+  const proxy = activeProxies[randomIndex];
+  //debugLog('INFO', `Using proxy: ${proxy}`); // Log the chosen proxy
+  return proxy;
 }
 
 // Function to generate random and synchronized User-Agent and Fingerprint
@@ -195,14 +220,20 @@ function maskCookieHeader(cookieHeader) {
 }
 
 const HTTPS_AGENT = new https.Agent({ secureProtocol: 'TLSv1_2_method' });
-let axiosClient = null;
-if (axios) {
-  axiosClient = axios.create({
-    httpsAgent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT,
+function createAxiosClient() {
+  if (!axios) return null;
+  const proxyAgent = useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT;
+  if (useProxy) {
+    debugLog('INFO', `Axios Client using agent: Proxy`);
+  } else {
+    debugLog('INFO', `Axios Client using agent: Direct`);
+  }
+  const client = axios.create({
+    httpsAgent: proxyAgent,
     timeout: 15000,
     validateStatus: () => true
   });
-  axiosClient.interceptors.request.use((config) => {
+  client.interceptors.request.use((config) => {
     try {
       const headers = { ...(config.headers || {}) };
       const cookieValue = headers.Cookie || headers.cookie || '';
@@ -215,7 +246,7 @@ if (axios) {
     } catch {}
     return config;
   });
-  axiosClient.interceptors.response.use((response) => {
+  client.interceptors.response.use((response) => {
     try {
       const data = response && response.data;
       let preview = '';
@@ -251,7 +282,9 @@ if (axios) {
     } catch {}
     return Promise.reject(error);
   });
+  return client;
 }
+
 
 
 let gotScrapingFn = null;
@@ -284,7 +317,7 @@ function readJson(filePath, fallback) {
   }
 }
 function writeJson(filePath, data) {
-  debugLog('DEBUG', `Writing to file ${filePath}:`, data);
+  // debugLog('DEBUG', `Writing to file ${filePath}:`, data); // Commented out to reduce log noise
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
@@ -449,7 +482,8 @@ async function requestMeLikePython(opts) {
 
 
 async function fetchMeAxios(cf_clearance, token, userAgent = 'Mozilla/5.0') {
-  if (!axios) return null;
+  const currentAxiosClient = createAxiosClient();
+  if (!currentAxiosClient) return null;
   const globalSettings = readJson(SETTINGS_FILE, {});
   const enableAntiDetection = globalSettings.enableAntiDetection || false;
   let currentAccountUserAgent = userAgent;
@@ -471,12 +505,12 @@ async function fetchMeAxios(cf_clearance, token, userAgent = 'Mozilla/5.0') {
   }
 */
   const headers = {
-    'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
+    'User-Agent': 'Mozilla/5.0', // Use userAgent passed in or from the account
     'Accept': 'application/json, text/plain, */*',
     'Cookie': `cf_clearance=${cf_clearance || ''}; j=${token || ''}`
   };
   debugLog('OUTBOUND', 'axios GET /me', { headers: { ...headers, Cookie: maskCookieHeader(headers.Cookie) } });
-  const resp = await axiosClient.get('https://backend.wplace.live/me', { headers });
+  const resp = await currentAxiosClient.get('https://backend.wplace.live/me', { headers });
   if (!resp || resp.status !== 200) return null;
   const data = resp.data;
   if (data && typeof data === 'object') return data;
@@ -586,12 +620,14 @@ async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', 
     }));
   }
 
+  const selectedProxy = useProxy ? getRandomProxy() : null;
+  debugLog('INFO', `Puppeteer launching with proxy: ${selectedProxy || 'None'}`);
   const browser = await puppeteer.launch({
     headless: 'new',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      ...(useProxy && getRandomProxy() ? [`--proxy-server=${getRandomProxy()}`] : [])
+      ...(selectedProxy ? [`--proxy-server=${selectedProxy}`] : [])
     ]
   });
   try {
@@ -700,7 +736,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
         url: 'https://backend.wplace.live/purchase',
         method: 'POST',
         headers: {
-          'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
+          'User-Agent': 'Mozilla/5.0', // Use userAgent passed in or from the account
           'Accept': 'application/json, text/plain, */*',
           'Origin': 'https://wplace.live',
           'Referer': 'https://wplace.live/',
@@ -710,7 +746,7 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
         body: payload,
         throwHttpErrors: false,
         decompress: true,
-        agent: { https: HTTPS_AGENT },
+        agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
         timeout: { request: 30000 }
       });
       const status = r && (r.statusCode || r.status) || 0;
@@ -731,14 +767,14 @@ async function purchaseProduct(cf_clearance, token, productId, amount, userAgent
         path: '/purchase',
         method: 'POST',
         headers: {
-          'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
+          'User-Agent': 'Mozilla/5.0', // Use userAgent passed in or from the account
           'Accept': 'application/json, text/plain, */*',
           'Origin': 'https://wplace.live',
           'Referer': 'https://wplace.live/',
           'Content-Type': 'application/json',
           'Cookie': `cf_clearance=${cf_clearance || ''}; j=${token || ''}`
         },
-        agent: HTTPS_AGENT
+        agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT }
       };
       const req = https.request(options, (resp) => {
         let buf = '';
@@ -811,8 +847,12 @@ function startServer(port, host) {
       const area = m && m[1] ? m[1] : '';
       const no = m && m[2] ? m[2] : '';
       const remoteUrl = `https://backend.wplace.live/files/s0/tiles/${encodeURIComponent(area)}/${encodeURIComponent(no)}.png`;
+      const proxyForTiles = useProxy ? getRandomProxy() : null;
+      if (useProxy) {
+        // debugLog('INFO', `Fetching tile with proxy: ${proxyForTiles}`); // Commented to reduce log noise
+      }
       try {
-        https.get(remoteUrl, { agent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/png,image/*;q=0.8,*/*;q=0.5' } }, (r) => {
+        https.get(remoteUrl, { agent: HTTPS_AGENT, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/png,image/*;q=0.8,*/*;q=0.5' } }, (r) => {
           const status = r.statusCode || 0;
           if (status !== 200) {
             try { r.resume(); } catch {}
@@ -822,11 +862,13 @@ function startServer(port, host) {
           }
           res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
           r.pipe(res);
-        }).on('error', () => {
+        }).on('error', (e) => {
+          debugLog('ERROR', `Tile fetch error for ${remoteUrl}: ${e.message}`);
           res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
           res.end('Tile fetch error');
         });
       } catch (e) {
+        debugLog('CRITICAL', `Tile proxy error: ${e.message}`);
         res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Proxy error');
       }
@@ -862,6 +904,8 @@ function startServer(port, host) {
     if (parsed.pathname === '/api/token' && req.method === 'POST') {
       const body = req.body; // Use the already read body
       const token = body && typeof body.token === 'string' ? body.token : '';
+      const xpaw = body && typeof body.xpaw === 'string' ? body.xpaw : '';
+      const fp = body && typeof body.fp === 'string' ? body.fp : '';
       const worldX = (body && (typeof body.worldX === 'string' || typeof body.worldX === 'number')) ? body.worldX : null;
       const worldY = (body && (typeof body.worldY === 'string' || typeof body.worldY === 'number')) ? body.worldY : null;
       const userAgent = (body && typeof body.userAgent === 'string') ? body.userAgent : null;
@@ -882,7 +926,7 @@ function startServer(port, host) {
           // Do not update userAgent and fingerprint here anymore, they will be saved to the account
           writeJson(SETTINGS_FILE, mergedSettings);
         } catch {}
-        sseBroadcast('token', { token, worldX, worldY, userAgent, fingerprint });
+        sseBroadcast('token', { token, xpaw, fp, worldX, worldY, userAgent, fingerprint });
         res.writeHead(204, { 'Access-Control-Allow-Origin': '*' });
         res.end();
       // Remove .catch() because body has been handled at the beginning of the function
@@ -994,7 +1038,9 @@ function startServer(port, host) {
         const coords = Array.isArray(body && body.coords) ? body.coords : [];
         const t = body && typeof body.t === 'string' ? body.t : '';
         const jToken = body && typeof body.j === 'string' ? body.j : '';
-        if (!colors.length || !coords.length || !t || !jToken) {
+        const fp = body && typeof body.fp === 'string' ? body.fp : '';
+        const xpaw = body && typeof body.xpaw === 'string' ? body.xpaw : '';
+        if (!colors.length || !coords.length || !t || !jToken || !fp || !xpaw) {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'invalid payload' }));
           return;
@@ -1026,29 +1072,34 @@ function startServer(port, host) {
             return;
           }
           const remotePath = `/s0/pixel/${encodeURIComponent(area)}/${encodeURIComponent(no)}`;
-          const payload = JSON.stringify({ colors, coords, t });
+          const payload = JSON.stringify({ colors, coords, t, fp });
           
           try {
             const gotScraping = await getGotScrapingFn();
             if (gotScraping) {
+              if (useProxy) {
+                debugLog('INFO', `Pixel POST using proxy: ${getRandomProxy() || 'Direct'}`);
+              }
               debugLog('OUTBOUND', 'proxy pixel POST begin (got-scraping)', { path: remotePath });
-              const r = await gotScraping({
-                url: 'https://backend.wplace.live' + remotePath,
-                method: 'POST',
-                headers: {
-                  'User-Agent': currentAccountUserAgent, // Use userAgent from the account
+                const headers = {
+                  'User-Agent': 'Mozilla/5.0', // Use a fixed User-Agent as per reference file
                   'Accept': '*/*',
                   'Origin': 'https://wplace.live',
                   'Referer': 'https://wplace.live/',
                   'Content-Type': 'text/plain;charset=UTF-8',
                   'Cookie': `j=${jToken}; cf_clearance=${cf}`
-                },
-                body: payload,
-                throwHttpErrors: false,
-                decompress: true,
-                agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
-                timeout: { request: 30000 }
-              });
+                };
+                headers['x-pawtect-token'] = xpaw;
+                const r = await gotScraping({
+                  url: 'https://backend.wplace.live' + remotePath,
+                  method: 'POST',
+                  headers,
+                  body: payload,
+                  throwHttpErrors: false,
+                  decompress: true,
+                  agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
+                  timeout: { request: 30000 }
+                });
               const status = r && (r.statusCode || r.status) || 0;
               const text = r && (typeof r.body === 'string' ? r.body : (r.body ? String(r.body) : ''));
               debugLog('OUTBOUND_RESPONSE', 'proxy pixel POST end (got-scraping)', { status, bodyPreview: String(text || '').slice(0, 300) });
@@ -1060,21 +1111,27 @@ function startServer(port, host) {
               return;
             }
           } catch {}
+            const headers = {
+            'User-Agent': 'Mozilla/5.0',
+            'Accept': '*/*',
+            'Origin': 'https://wplace.live',
+            'Referer': 'https://wplace.live/',
+            'Content-Type': 'text/plain;charset=UTF-8',
+            'Cookie': `j=${jToken}; cf_clearance=${cf}`
+            };
+          headers['x-pawtect-token'] = xpaw;
+          const pixelProxy = useProxy ? getRandomProxy() : null;
+          if (useProxy) { // Only log if proxy is actually used
+            debugLog('INFO', `Pixel POST using proxy: ${pixelProxy || 'Direct'}`);
+          }
           const options = {
             hostname: 'backend.wplace.live',
             port: 443,
             path: remotePath,
             method: 'POST',
-            agent: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT,
-            headers: {
-              'User-Agent': currentAccountUserAgent, // Use userAgent from the account
-              'Accept': '*/*',
-              'Origin': 'https://wplace.live',
-              'Referer': 'https://wplace.live/',
-              'Content-Type': 'text/plain;charset=UTF-8',
-              'Cookie': `j=${jToken}; cf_clearance=${cf}`
-            }
-          };
+            agent: pixelProxy ? new HttpsProxyAgent(pixelProxy) : HTTPS_AGENT,
+            headers
+            };
           debugLog('OUTBOUND', 'proxy pixel POST begin', { path: remotePath, headers: { ...options.headers, Cookie: maskCookieHeader(options.headers.Cookie) } });
           const upstreamReq = https.request(options, (up) => {
             const chunks = [];
@@ -1095,6 +1152,7 @@ function startServer(port, host) {
             });
           });
           upstreamReq.on('error', (e) => {
+            debugLog('ERROR', `Pixel POST upstream error: ${e.message}`);
             res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({ error: 'upstream error', message: e && e.message ? e.message : String(e) }));
           });
@@ -1195,12 +1253,15 @@ function startServer(port, host) {
           try {
             const gotScraping = await getGotScrapingFn();
             if (gotScraping) {
+              if (useProxy) {
+                debugLog('INFO', `Purchase POST using proxy: ${getRandomProxy() || 'Direct'}`);
+              }
               debugLog('OUTBOUND', 'proxy purchase POST begin (got-scraping)', { path: remotePath, body: payload });
               const r = await gotScraping({
                 url: 'https://backend.wplace.live' + remotePath,
                 method: 'POST',
                 headers: {
-                  'User-Agent': 'Mozilla/5.0', // Set to fixed User-Agent for testing
+                  'User-Agent': 'Mozilla/5.0', // Use userAgent passed in or from the account
                   'Accept': 'application/json, text/plain, */*',
                   'Origin': 'https://wplace.live',
                   'Referer': 'https://wplace.live/',
@@ -1210,7 +1271,7 @@ function startServer(port, host) {
                 body: payload,
                 throwHttpErrors: false,
                 decompress: true,
-                agent: { https: HTTPS_AGENT }, // Temporarily disable proxy for testing
+                agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
                 timeout: { request: 30000 }
               });
               const status = r && (r.statusCode || r.status) || 0;
@@ -1237,14 +1298,18 @@ function startServer(port, host) {
             }
           }
 
+          const purchaseProxy = useProxy ? getRandomProxy() : null;
+          if (useProxy) { // Only log if proxy is actually used
+            debugLog('INFO', `Purchase POST using proxy: ${purchaseProxy || 'Direct'}`);
+          }
           const options = {
             hostname: 'backend.wplace.live',
             port: 443,
             path: remotePath,
             method: 'POST',
-            agent: HTTPS_AGENT, // Temporarily disable proxy for testing
+            agent: purchaseProxy ? new HttpsProxyAgent(purchaseProxy) : HTTPS_AGENT,
             headers: {
-              'User-Agent': 'Mozilla/5.0', // Set to fixed User-Agent for testing
+              'User-Agent': 'Mozilla/5.0', // Use userAgent passed in or from the account
               'Accept': 'application/json, text/plain, */*',
               'Origin': 'https://wplace.live',
               'Referer': 'https://wplace.live/',
@@ -1269,6 +1334,7 @@ function startServer(port, host) {
             });
           });
           upstreamReq.on('error', (e) => {
+            debugLog('ERROR', `Purchase POST upstream error: ${e.message}`);
             res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({ error: 'upstream error', message: e && e.message ? e.message : String(e) }));
           });
@@ -1638,7 +1704,7 @@ function startServer(port, host) {
         acct.lastRefresh = now; // Update last refresh time
         updatedAccounts = true;
         accounts[idx] = acct;
-        debugLog('INFO', `Account refreshed and updated: ${acct.name}`, acct);
+        debugLog('DEBUG', `Account refreshed and updated: ${acct.name}`, DEBUG_MASK ? '(masked)' : acct);
         writeJson(ACCOUNTS_FILE, accounts);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(acct));
@@ -1741,10 +1807,13 @@ function main() {
   loadProxies();
 
   // Watch for changes in proxies.txt
+  const debouncedLoadProxies = debounce(() => {
+    debugLog('INFO', `${PROXY_FILE} changed, reloading proxies...`);
+    loadProxies();
+  }, 100); // Debounce for 100ms
   fs.watch(PROXY_FILE, (eventType, filename) => {
     if (eventType === 'change') {
-      debugLog('INFO', `${PROXY_FILE} changed, reloading proxies...`);
-      loadProxies();
+      debouncedLoadProxies();
     }
   });
 }
@@ -1810,3 +1879,4 @@ async function startAccountRefreshScheduler() {
 if (require.main === module) {
   main();
 }
+

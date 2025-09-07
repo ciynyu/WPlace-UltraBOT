@@ -99,6 +99,8 @@ browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === 'wplace_token_found') { // Removed check for msg.token because cfClearance might be the primary data
     const tokenData = {
       token: String(msg.token || '') || null, // Ensure token is string or null
+      xpaw: msg.xpaw || null,
+      fp: msg.fp || null,
       worldX: msg.worldX || null,
       worldY: msg.worldY || null,
       cfClearance: msg.cfClearance || null, // Add cfClearance
@@ -106,39 +108,20 @@ browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       timestamp: Date.now()
     };
 
-    browser.storage.local.get(['wplace_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'tokenQueue'], async (result) => {
+    browser.storage.local.get(['wplace_token', 'wplace_xpaw_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'tokenQueue'], async (result) => {
       const currentToken = result.wplace_token;
+      const currentxpaw = result.xpaw_token;
+      const currentfp = result.wplace_fp || null; // Ensure this is correctly retrieved
       const currentWorldX = result.wplace_world_x;
       const currentWorldY = result.wplace_world_y;
       const currentCfClearance = result.wplace_cf_clearance; // Get current cfClearance from storage
-      let tokenQueue = result.tokenQueue || [];
 
-      // If the queue is empty, try to send immediately
-      if (tokenQueue.length === 0) {
-        console.log("[WPlace-Helper-Firefox] Token queue is empty. Attempting to send token immediately.");
-        const sentImmediately = await sendTokenToBackend(tokenData);
-        if (sentImmediately) {
-          console.log("[WPlace-Helper-Firefox] Token sent immediately and successfully.");
-          // Only update storage if the token is new or coordinates changed
-          if (currentToken !== tokenData.token || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(tokenData.worldY) || currentCfClearance !== tokenData.cfClearance) {
-            const toStore = {};
-            if (tokenData.token) toStore.wplace_token = tokenData.token;
-            if (tokenData.worldX) toStore.wplace_world_x = String(tokenData.worldX);
-            if (tokenData.worldY) toStore.wplace_world_y = String(tokenData.worldY);
-            if (tokenData.cfClearance) toStore.wplace_cf_clearance = tokenData.cfClearance;
-            browser.storage.local.set(toStore);
-          }
-          sendResponse({ ok: true });
-          return; // Exit as token was sent
-        } else {
-          console.log("[WPlace-Helper-Firefox] Immediate token send failed. Adding to queue.");
-        }
-      }
-
-      // If not sent immediately, or if queue was not empty, proceed with queue logic
-      if (currentToken !== tokenData.token || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(tokenData.worldY) || currentCfClearance !== tokenData.cfClearance) {
+      // Only update storage and queue if the new token/cfClearance is different or coordinates change
+      if (currentToken !== tokenData.token || currentxpaw !== tokenData.xpaw || currentfp !== tokenData.fp || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(tokenData.worldY) || currentCfClearance !== tokenData.cfClearance ) {
         const toStore = {};
         if (tokenData.token) toStore.wplace_token = tokenData.token;
+        if (tokenData.xpaw) toStore.wplace_xpaw_token = tokenData.xpaw;
+        if (tokenData.fp) toStore.wplace_fp = tokenData.fp;
         if (tokenData.worldX) toStore.wplace_world_x = String(tokenData.worldX);
         if (tokenData.worldY) toStore.wplace_world_y = String(tokenData.worldY);
         if (tokenData.cfClearance) toStore.wplace_cf_clearance = tokenData.cfClearance;
@@ -148,6 +131,7 @@ browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         });
 
         // Add tokenData to queue
+        let tokenQueue = result.tokenQueue || [];
         tokenQueue.push(tokenData);
         browser.storage.local.set({ tokenQueue }, () => {
           console.log("[WPlace-Helper-Firefox] Token added to queue. Scheduling retry alarm.");

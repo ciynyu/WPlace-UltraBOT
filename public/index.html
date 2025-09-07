@@ -155,14 +155,14 @@
     /* CSS for range-overlay */
    #range-overlay {
        position: absolute;
-       border: 2px dashed #22d3ee; /* Màu xanh neon */
-       background: rgba(34, 211, 238, 0.2); /* Nền trong suốt với màu xanh */
+       border: 2px dashed #22d3ee; /* Neon blue */
+       background: rgba(34, 211, 238, 0.2); /* Transparent background with blue */
        z-index: 1000;
        pointer-events: none;
    }
    #range-overlay.saved-overlay {
-       background: none; /* Bỏ màu nền khi đã lưu */
-       border: 2px solid #22d3ee; /* Viền liền khi đã lưu */
+       background: none; /* Remove background color when saved */
+       border: 2px solid #22d3ee; /* Solid border when saved */
    }
 
     #overlay-section {
@@ -685,7 +685,7 @@
       text-align: center;
     }
     #ready-popup .controls-row { justify-content: center; gap: 10px; }
-    #ready-token-input { width: 320px; }
+    /* #ready-token-input { width: 320px; } - Di chuyển style inline */
     #select-mode-controls { justify-content: center; }
     .select-mode-wrap { display: inline-flex; align-items: center; gap: 8px; justify-content: center; flex: 1; }
     .select-mode-label { font-size: 12px; color: #e5e7eb; opacity: 0.8; cursor: pointer; user-select: none; }
@@ -945,11 +945,11 @@
               <span id="auto-start-label-right" class="select-mode-label" data-i18n="ready.autoStart.on">Auto start on</span>
             </div>
             <div class="select-mode-wrap" style="margin-left:12px;">
-              <span id="advanced-paint-label-left" class="select-mode-label" data-i18n="ready.advancedPaint.off">Advanced Paint (Tắt)</span>
+              <span id="advanced-paint-label-left" class="select-mode-label" data-i18n="ready.advancedPaint.off">Advanced Paint (Off)</span>
               <button id="advanced-paint-toggle" class="select-mode-track" type="button" role="switch" aria-checked="false" aria-label="Advanced Paint">
                 <span class="select-mode-knob"></span>
               </button>
-              <span id="advanced-paint-label-right" class="select-mode-label" data-i18n="ready.advancedPaint.on">Advanced Paint (Bật)</span>
+              <span id="advanced-paint-label-right" class="select-mode-label" data-i18n="ready.advancedPaint.on">Advanced Paint (On)</span>
             </div>
           </div>
           <div id="ready-account-list" hidden></div>
@@ -957,7 +957,10 @@
             <button id="btn-auto-select-accounts" class="app-btn" type="button" data-i18n="ready.autoSelectAccounts">Auto select account</button>
           </div>
           <div class="controls-row">
-            <input id="ready-token-input" type="text" placeholder="Token" data-i18n-placeholder="ready.tokenPlaceholder" />
+            <input id="ready-token-input" type="text" placeholder="Token" data-i18n-placeholder="ready.tokenPlaceholder" style="width: 320px;" />
+          </div>
+          <div class="controls-row">
+            <input id="ready-xpaw-input" type="text" placeholder="Xpaw" data-i18n-placeholder="ready.xpawPlaceholder" style="width: 320px;" />
           </div>
           <div class="controls-row">
             <button id="btn-auto-select" class="app-btn" type="button" data-i18n="ready.autoSelect">Otomatik seç</button>
@@ -1297,6 +1300,14 @@
   <script>
     
     const I18N_DEFAULT_LANG = 'en';
+    const debugEnabled = true;
+    if (!debugEnabled) {
+      console.log = function() {};
+      console.info = function() {};
+      console.warn = function() {};
+      console.error = function() {};
+      console.debug = function() {};
+    }
     let I18N_LANG = I18N_DEFAULT_LANG;
     let I18N_STRINGS = {};
     const LANGS = [
@@ -1460,7 +1471,7 @@
       }, { once: true });
     }
 
-    // Hàm throttle
+    // Throttle function
     function throttle(func, delay) {
       let timeoutId = null;
       let lastArgs = null;
@@ -2195,7 +2206,7 @@ function calculateTotalDroplets() {
     updateMovementButtonEnabled();
 
     // Pixel fullness notifier
-    const FULLNESS_NOTIFY_PERIOD_MS = 30 * 1000;
+    const FULLNESS_NOTIFY_PERIOD_MS = 300 * 1000; // 5 phút (trước đây 30 giây)
     let lastFullnessNotifyAt = 0;
     function maybeNotifyFullnessNow(){
       const now = Date.now();
@@ -4349,7 +4360,7 @@ async function reloadCurrentBackground() {
           const url = buildUrl(area, no) + '?t=' + Date.now();
           const image = new Image();
           image.onload = () => {
-            //clearColorCaches(); // Xóa cache màu sắc khi tải lại ảnh nền
+            //clearColorCaches(); // Clear color cache when reloading background image
             const prevOrigin = getCurrentOriginTile();
             const prevW = currentTileW || (img ? (img.width|0) : 0);
             const prevH = currentTileH || (img ? (img.height|0) : 0);
@@ -4396,7 +4407,7 @@ async function reloadCurrentBackground() {
       const url = buildUrl(area, no) + '?t=' + Date.now();
       const image = new Image();
       image.onload = () => {
-        clearColorCaches(); // Xóa cache màu sắc khi tải ảnh mới từ input
+        clearColorCaches(); // Clear color cache when loading new image from input
         const prevOrigin = getCurrentOriginTile();
         const prevW = currentTileW || (img ? (img.width|0) : 0);
         const prevH = currentTileH || (img ? (img.height|0) : 0);
@@ -4901,27 +4912,27 @@ function loadImage(area, no, preserveView = false) {
       }
     });
 /*
-      // Xử lý kéo ảnh
+      // Handle image dragging
       if (signDragging) {
-        // Nếu ready popup đang mở và ở chế độ global, chuyển sang chế độ kéo bản đồ
+        // If ready popup is open and in global mode, switch to map dragging mode
         if (isReadyOpen() && readyGlobalMode) {
-          signDragging = false; // Ngừng kéo ảnh
-          state.dragging = true; // Bắt đầu kéo bản đồ
-          state.lastX = e.clientX; // Cập nhật vị trí chuột cho kéo bản đồ
+          signDragging = false; // Stop image dragging
+          state.dragging = true; // Start map dragging
+          state.lastX = e.clientX; // Update mouse position for map dragging
           state.lastY = e.clientY;
           document.body.classList.add('dragging');
-          render(); // Render lại để cập nhật trạng thái
+          render(); // Re-render to update state
           updatePixelMarkers();
           updateCanvasCursorAt(worldX, worldY);
-          return; // Thoát, xử lý kéo bản đồ ở lượt tiếp theo của mousemove
+          return; // Exit, handle map dragging in next mousemove iteration
         }
-        // Nếu không ở chế độ global hoặc ready popup không mở, tiếp tục kéo ảnh
+        // If not in global mode or ready popup is not open, continue image dragging
       }
-      // Xử lý kéo bản đồ (được kích hoạt nếu signDragging là false)
+      // Handle map dragging (activated if signDragging is false)
       else if (state.dragging) {
-        // Logic kéo bản đồ hiện tại (đã nằm trong khối này)
+        // Current map dragging logic (already in this block)
       } else {
-        // Nếu không có hành động kéo nào đang diễn ra, thoát
+        // If no dragging action is in progress, exit
         return;
       }
       const rect = canvas.getBoundingClientRect();
@@ -6307,10 +6318,10 @@ function loadImage(area, no, preserveView = false) {
         if (aActive === bActive) return 0;
         return aActive ? 1 : -1; // Inactive first
       }) : [];
-      // Đảm bảo mỗi đối tượng tài khoản có thuộc tính estimatedFullRechargeTime được khởi tạo
+      // Ensure each account object has the estimatedFullRechargeTime property initialized
       accountsData = sortedRows.map(acc => ({
         ...acc,
-        estimatedFullRechargeTime: acc.estimatedFullRechargeTime || null // Khởi tạo nếu chưa có
+        estimatedFullRechargeTime: acc.estimatedFullRechargeTime || null // Initialize if not present
       }));
       try { recomputeActivePalette(); } catch {}
       accountsTbody.innerHTML = '';
@@ -6463,16 +6474,16 @@ function loadImage(area, no, preserveView = false) {
       try {
         const res = await fetch('/api/accounts');
         const data = await res.json();
-        // Không gọi renderAccountsTable ở đây, nó sẽ được gọi sau khi fetch settings
-        // Điều này đảm bảo accountsData đã có estimatedFullRechargeTime trước khi render
+        // Do not call renderAccountsTable here, it will be called after fetching settings
+        // This ensures accountsData has estimatedFullRechargeTime before rendering
         if (Array.isArray(data)) {
             // Update accountsData before passing to renderAccountsTable
             accountsData = data.map(acc => {
                 const existingAcc = accountsData.find(e => e.id === acc.id);
                 const newAcc = {
                     ...acc,
-                    // Nếu tài khoản đã đầy, đảm bảo estimatedFullRechargeTime được reset.
-                    // Nếu không, giữ nguyên giá trị từ existingAcc hoặc từ acc mới nếu chưa có.
+                    // If the account is full, ensure estimatedFullRechargeTime is reset.
+                    // Otherwise, keep the value from existingAcc or from the new acc if not already present.
                     estimatedFullRechargeTime: (acc.pixelCount === acc.pixelMax) ? null : (existingAcc ? existingAcc.estimatedFullRechargeTime : acc.estimatedFullRechargeTime || null),
                     lastPixelCount: acc.pixelCount, // Store current pixelCount as lastPixelCount for change detection
                     isRefreshing: existingAcc ? existingAcc.isRefreshing : false // Add isRefreshing flag
@@ -6481,7 +6492,7 @@ function loadImage(area, no, preserveView = false) {
             });
             renderAccountsTable(accountsData);
         }
-        updateTotalDropletsDisplay(); // Cập nhật tổng droplets sau khi render bảng tài khoản
+        updateTotalDropletsDisplay(); // Update total droplets after rendering the accounts table
 
         // Fetch settings and populate update interval input
         const settingsRes = await fetch('/api/settings');
@@ -6534,7 +6545,7 @@ async function refreshAccountById(accountId){
         const res = await fetch('/api/accounts');
         const rows = await res.json();
         if (Array.isArray(rows)) {
-      updateTotalDropletsDisplay(); // Cập nhật tổng droplets sau khi load accounts
+      updateTotalDropletsDisplay(); // Update total droplets after loading accounts
           for (let i = 0; i < rows.length; i++) {
             const r = rows[i];
             const id = r && r.id != null ? String(r.id) : '';
@@ -7091,6 +7102,8 @@ async function refreshAccountById(accountId){
     const autoSelectAccountsBtn = document.getElementById('btn-auto-select-accounts');
     const startBtn = document.getElementById('start');
     const readyPixelEl = document.getElementById('ready-pixel');
+    let xpawToken = '';
+    try { xpawToken = localStorage.getItem('last.captured.xpaw') || ''; } catch {}
     const readyAccountBtn = document.getElementById('btn-ready-account');
     const readyAccountList = document.getElementById('ready-account-list');
     const readyTokenInput = document.getElementById('ready-token-input');
@@ -7381,6 +7394,13 @@ async function refreshAccountById(accountId){
           try {
             const data = ev && ev.data ? JSON.parse(ev.data) : null;
             const token = data && data.token ? String(data.token) : '';
+            const xpaw = data && data.xpaw ? String(data.xpaw) : '';
+            if (xpaw) {
+              xpawToken = xpaw;
+              try { localStorage.setItem('last.captured.xpaw', xpaw); } catch {}
+              const readyXpawInput = document.getElementById('ready-xpaw-input');
+              if (readyXpawInput) { readyXpawInput.value = xpaw; }
+            }
             if (!token) return;
             const rp = document.getElementById('ready-popup');
             const isOpen = rp && !rp.hidden;
@@ -8217,13 +8237,111 @@ function getSelectedAccountsSortedByCapacityDesc() {
     console.log("[DEBUG] getSelectedAccountsSortedByCapacityDesc: Accounts after sorting:", rows); // Debug: After sort
     return rows;
 }
+      function genFp() {
+        const seed = Date.now().toString() + Math.random().toString(16).slice(2);
+        return md5(seed);
+      }
 
-    async function postBatch(area, no, colors, coords, t, jToken) {
+      function md5(str) {
+        function add(x, y) { return (x + y) & 0xffffffff; }
+        function rol(x, c) { return (x << c) | (x >>> (32 - c)); }
+        function cmn(q, a, b, x, s, t) { return add(rol(add(add(a, q), add(x, t)), s), b); }
+        function ff(a, b, c, d, x, s, t) { return cmn((b & c) | ((~b) & d), a, b, x, s, t); }
+        function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & (~d)), a, b, x, s, t); }
+        function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+        function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | (~d)), a, b, x, s, t); }
+        function md51(str) {
+          const n = ((str.length + 8) >> 6) + 1;
+          const blks = new Array(n * 16).fill(0);
+          for (let i = 0; i < str.length; i++) blks[i >> 2] |= str.charCodeAt(i) << ((i % 4) * 8);
+          blks[str.length >> 2] |= 0x80 << ((str.length % 4) * 8);
+          blks[n * 16 - 2] = str.length * 8;
+          let a = 1732584193, b = -271733879, c = -1732584194, d = 271733878;
+          for (let i = 0; i < blks.length; i += 16) {
+            const oa = a, ob = b, oc = c, od = d;
+            a = ff(a, b, c, d, blks[i], 7, -680876936);
+            d = ff(d, a, b, c, blks[i+1], 12, -389564586);
+            c = ff(c, d, a, b, blks[i+2], 17, 606105819);
+            b = ff(b, c, d, a, blks[i+3], 22, -1044525330);
+            a = ff(a, b, c, d, blks[i+4], 7, -176418897);
+            d = ff(d, a, b, c, blks[i+5], 12, 1200080426);
+            c = ff(c, d, a, b, blks[i+6], 17, -1473231341);
+            b = ff(b, c, d, a, blks[i+7], 22, -45705983);
+            a = ff(a, b, c, d, blks[i+8], 7, 1770035416);
+            d = ff(d, a, b, c, blks[i+9], 12, -1958414417);
+            c = ff(c, d, a, b, blks[i+10], 17, -42063);
+            b = ff(b, c, d, a, blks[i+11], 22, -1990404162);
+            a = ff(a, b, c, d, blks[i+12], 7, 1804603682);
+            d = ff(d, a, b, c, blks[i+13], 12, -40341101);
+            c = ff(c, d, a, b, blks[i+14], 17, -1502002290);
+            b = ff(b, c, d, a, blks[i+15], 22, 1236535329);
+            a = gg(a, b, c, d, blks[i+1], 5, -165796510);
+            d = gg(d, a, b, c, blks[i+6], 9, -1069501632);
+            c = gg(c, d, a, b, blks[i+11], 14, 643717713);
+            b = gg(b, c, d, a, blks[i], 20, -373897302);
+            a = gg(a, b, c, d, blks[i+5], 5, -701558691);
+            d = gg(d, a, b, c, blks[i+10], 9, 38016083);
+            c = gg(c, d, a, b, blks[i+15], 14, -660478335);
+            b = gg(b, c, d, a, blks[i+4], 20, -405537848);
+            a = gg(a, b, c, d, blks[i+9], 5, 568446438);
+            d = gg(d, a, b, c, blks[i+14], 9, -1019803690);
+            c = gg(c, d, a, b, blks[i+3], 14, -187363961);
+            b = gg(b, c, d, a, blks[i+8], 20, 1163531501);
+            a = gg(a, b, c, d, blks[i+13], 5, -1444681467);
+            d = gg(d, a, b, c, blks[i+2], 9, -51403784);
+            c = gg(c, d, a, b, blks[i+7], 14, 1735328473);
+            b = gg(b, c, d, a, blks[i+12], 20, -1926607734);
+            a = hh(a, b, c, d, blks[i+5], 4, -378558);
+            d = hh(d, a, b, c, blks[i+8], 11, -2022574463);
+            c = hh(c, d, a, b, blks[i+11], 16, 1839030562);
+            b = hh(b, c, d, a, blks[i+14], 23, -35309556);
+            a = hh(a, b, c, d, blks[i+1], 4, -1530992060);
+            d = hh(d, a, b, c, blks[i+4], 11, 1272893353);
+            c = hh(c, d, a, b, blks[i+7], 16, -155497632);
+            b = hh(b, c, d, a, blks[i+10], 23, -1094730640);
+            a = hh(a, b, c, d, blks[i+13], 4, 681279174);
+            d = hh(d, a, b, c, blks[i], 11, -358537222);
+            c = hh(c, d, a, b, blks[i+3], 16, -722521979);
+            b = hh(b, c, d, a, blks[i+6], 23, 76029189);
+            a = hh(a, b, c, d, blks[i+9], 4, -640364487);
+            d = hh(d, a, b, c, blks[i+12], 11, -421815835);
+            c = hh(c, d, a, b, blks[i+15], 16, 530742520);
+            b = hh(b, c, d, a, blks[i+2], 23, -995338651);
+            a = ii(a, b, c, d, blks[i], 6, -198630844);
+            d = ii(d, a, b, c, blks[i+7], 10, 1126891415);
+            c = ii(c, d, a, b, blks[i+14], 15, -1416354905);
+            b = ii(b, c, d, a, blks[i+5], 21, -57434055);
+            a = ii(a, b, c, d, blks[i+12], 6, 1700485571);
+            d = ii(d, a, b, c, blks[i+3], 10, -1894986606);
+            c = ii(c, d, a, b, blks[i+10], 15, -1051523);
+            b = ii(b, c, d, a, blks[i+1], 21, -2054922799);
+            a = ii(a, b, c, d, blks[i+8], 6, 1873313359);
+            d = ii(d, a, b, c, blks[i+15], 10, -30611744);
+            c = ii(c, d, a, b, blks[i+6], 15, -1560198380);
+            b = ii(b, c, d, a, blks[i+13], 21, 1309151649);
+            a = ii(a, b, c, d, blks[i+4], 6, -145523070);
+            d = ii(d, a, b, c, blks[i+11], 10, -1120210379);
+            c = ii(c, d, a, b, blks[i+2], 15, 718787259);
+            b = ii(b, c, d, a, blks[i+9], 21, -343485551);
+            a = add(a, oa); b = add(b, ob); c = add(c, oc); d = add(d, od);
+          }
+          return [a, b, c, d];
+        }
+        function toHex(num) {
+          let s = '';
+          for (let j = 0; j < 4; j++) s += ('0' + ((num >> (j * 8)) & 0xff).toString(16)).slice(-2);
+          return s;
+        }
+        const out = md51(str);
+        return toHex(out[0]) + toHex(out[1]) + toHex(out[2]) + toHex(out[3]);
+      }
+    async function postBatch(area, no, colors, coords, t, jToken, xpaw) {
       try {
+        const fp = genFp();
         const res = await fetch('/api/pixel/' + encodeURIComponent(area) + '/' + encodeURIComponent(no), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ colors, coords, t, j: jToken })
+          body: JSON.stringify({ colors, coords, t, j: jToken, xpaw, fp })
         });
         const text = await res.text();
         let payload = null;
@@ -8318,7 +8436,7 @@ if (startBtn) {
 
   //const pixelsToPaint = dataExport.filteredPixels; // Use the already sorted and filtered pixels
 
-    // Her durumda (tek tile veya değil) pikselleri world koordinata göre area/no bazında gruplandır
+    // In all cases (single tile or not), group pixels based on world coordinates (area/no)
   const groups = (function(){
     try {
       const w = img ? (img.width|0) : 0, h = img ? (img.height|0) : 0;
@@ -8372,7 +8490,7 @@ if (startBtn) {
             if (take <= 0) continue;
             const colorsSlice = g.colors.slice(offset, offset + take);
             const coordsSlice = g.coords.slice(offset * 2, (offset + take) * 2);
-            const r = await postBatch(String(g.area), String(g.no), colorsSlice, coordsSlice, authToken, String(acc.token || ''));
+            const r = await postBatch(String(g.area), String(g.no), colorsSlice, coordsSlice, authToken, String(acc.token || ''), xpawToken);
             if (r && r.status === 429) {
               hadRequestError = true;
               try { showToast(t('messages.cfClearanceChange'), 'error', 3500); } catch { showToast('Please change cf_clearance.', 'error', 3500); }
@@ -8413,7 +8531,7 @@ if (startBtn) {
         try { await loadAccounts(); } catch {}
         try { updateReadySelectionLabel(); } catch {}
         render();
-        // Auto mode: sau khi vẽ xong, chọn tài khoản tiếp theo và tự động chọn pixel
+        // Auto mode: after painting, select the next account and automatically select pixels
         if (autoMode && paintedAny && !hadRequestError) {
           console.log("[DEBUG] Auto mode enabled, painted pixels, and no request errors. Proceeding with auto-selection."); // Debug: Auto mode active
           try {
@@ -8513,7 +8631,7 @@ if (startBtn) {
             assigned[j] = true;
           }
           if (colorsSlice.length === 0) continue;
-          const r = await postBatch(area, no, colorsSlice, coordsSlice, authToken, String(acc.token || ''));
+          const r = await postBatch(area, no, colorsSlice, coordsSlice, authToken, String(acc.token || ''), xpawToken);
           if (r && r.status === 429) {
             hadRequestError = true;
             try { showToast(t('messages.cfClearanceChange'), 'error', 3500); } catch { showToast('Please change cf_clearance.', 'error', 3500); }
@@ -8686,19 +8804,19 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
         const lx = readyHoverPixel.x|0;
         const ly = readyHoverPixel.y|0;
         if (lx < 0 || ly < 0 || lx >= selItem.image.naturalWidth || ly >= selItem.image.naturalHeight) return false;
-        // Trì hoãn tính toán chính xác: sử dụng so sánh RGB đơn giản cho kiểm tra nhanh tạm thời
-        // Duy trì isOpaquePixel để kiểm tra xem pixel có trong suốt hay không
+        // Defer accurate calculation: use simple RGB comparison for quick temporary check
+        // Maintain isOpaquePixel to check if the pixel is transparent
         if (!isOpaquePixel(selItem, lx, ly)) return false;
         
         let colorDiffers = true;
-        // Nếu có màu override được chọn
+        // If an override color is selected
         if (selectedOverrideColorId != null) {
             const overrideRgb = getPaletteRgbById(selectedOverrideColorId);
             const worldX = Math.round((selItem.worldX || 0) + lx);
             const worldY = Math.round((selItem.worldY || 0) + ly);
             const currentWorldColor = getCompositeColorAtWorld(worldX, worldY);
 
-            // Kiểm tra nếu màu override (không trong suốt) trùng với màu hiện tại trên bản đồ
+            // Check if the override color (non-transparent) matches the current color on the map
             if (selectedOverrideColorId !== 0 && overrideRgb && currentWorldColor &&
                 currentWorldColor.r === overrideRgb[0] &&
                 currentWorldColor.g === overrideRgb[1] &&
@@ -8706,38 +8824,38 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
                 currentWorldColor.a > 0) {
                 colorDiffers = false;
             } else if (selectedOverrideColorId === 0 && (!currentWorldColor || currentWorldColor.a === 0)) {
-                // Nếu override là trong suốt (ID 0) và pixel trên bản đồ cũng trong suốt
+                // If override is transparent (ID 0) and the pixel on the map is also transparent
                 colorDiffers = false;
             }
         } else {
-            // Nếu không có màu override, so sánh trực tiếp màu của ảnh với màu trên bản đồ
+            // If no override color, directly compare image color with map color
             colorDiffers = !isSamePaletteIdAsBase(selItem, lx, ly);
         }
 
         if (!colorDiffers) return false;
 
-        // Kiểm tra điều kiện sớm: giới hạn pixel
+        // Early condition check: pixel limit
         const limit = Math.max(0, Number(getReadySelectionLimit()) || 0);
         const map = getSelectedMap(selItem);
         const already = map ? map.size : 0;
         if (limit > 0 && already >= limit) { showMaxReachedToastOnceForSpace(limit); return false; }
         
-        // Xác định colorId hiệu quả cho việc kiểm tra dung lượng (override hoặc màu pixel thực tế)
+        // Determine effective colorId for capacity check (override or actual pixel color)
         let checkColorId = null;
         if (selectedOverrideColorId != null && selectedOverrideColorId !== 0) {
           checkColorId = selectedOverrideColorId;
         } else {
-          // Tính toán getItemPixelPaletteId chỉ khi cần thiết
+          // Calculate getItemPixelPaletteId only when needed
           try { checkColorId = getItemPixelPaletteId(selItem, lx, ly); } catch { checkColorId = null; }
         }
         
-        // Kiểm tra điều kiện sớm: dung lượng premium color
+        // Early condition check: premium color capacity
         if (checkColorId != null && isPremiumColorId(checkColorId)){
           const remain = getPremiumColorRemainingLimit(checkColorId);
           if (!(remain > 0)) { showMaxReachedToastOnceForSpace(remain || 0); return false; }
         }
         
-        // Thêm pixel vào lựa chọn (sử dụng addPixelSelection hiện có)
+        // Add pixel to selection (using existing addPixelSelection)
         const didAdd = addPixelSelection(selItem, lx, ly, selectedOverrideColorId != null ? selectedOverrideColorId : null);
         if (didAdd) {
           try { updateReadySelectionLabel(); updateStartEnabled(); updatePixelMarkers(); render(); } catch {}
@@ -8811,17 +8929,17 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
     });
 
  (async () => {
-  loadPriorityColors(); // Call load on startup
-  renderPriorityColors(); // Call render on startup
-  loadBrokenPixelColors(); // Call load on startup for broken pixels
-  renderBrokenPixelColors(); // Call render on startup for broken pixels
-
-  // TẠM THỜI: Ghi đè brokenPixelPriorityColors và priorityColors để debug
-  renderBrokenPixelColors(); // Render lại sau khi ghi đè
-  renderPriorityColors(); // Render lại sau khi ghi đè
-
-  try {
-    // Restore last view position
+   loadPriorityColors(); // Call load on startup
+   renderPriorityColors(); // Call render on startup
+   loadBrokenPixelColors(); // Call load on startup for broken pixels
+   renderBrokenPixelColors(); // Call render on startup for broken pixels
+ 
+   // TEMPORARY: Overwrite brokenPixelPriorityColors and priorityColors for debugging
+   renderBrokenPixelColors(); // Re-render after overwrite
+   renderPriorityColors(); // Re-render after overwrite
+ 
+   try {
+     // Restore last view position
     try {
       const sx = parseFloat(localStorage.getItem('view.translateX') || '');
       const sy = parseFloat(localStorage.getItem('view.translateY') || '');
@@ -9172,12 +9290,12 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
       }
     }
 
-    // Hàm mới để báo cáo số lượng pixel cần tô còn lại theo màu
+    // New function to report remaining paintable pixels by color
     function getRemainingPaintablePixelSummary(filteredPixels) {
         const remainingPixelSummary = new Map();
 
         for (const p of filteredPixels) {
-            // Chúng ta chỉ quan tâm đến các pixel isBroken (pixel bị sai)
+            // We are only interested in isBroken pixels (incorrect pixels)
             if (p.isBroken) {
                 remainingPixelSummary.set(p.c, (remainingPixelSummary.get(p.c) || 0) + 1);
             }
@@ -9221,7 +9339,7 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
             const currentWorldColor = getCompositeColorAtWorld(rec.wx, rec.wy);
             const selectedColor = getPaletteRgbById(rec.colorId);
 
-            // Loại bỏ nếu màu đã trùng khớp trên bản đồ hoặc trong suốt
+            // Remove if color already matches on map or is transparent
             if (currentWorldColor && selectedColor &&
                 currentWorldColor.r === selectedColor[0] &&
                 currentWorldColor.g === selectedColor[1] &&

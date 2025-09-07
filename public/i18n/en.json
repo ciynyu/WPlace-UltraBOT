@@ -16,6 +16,7 @@
     "deleteAllSelected": "Deselect all",
     "start": "Start",
     "tokenPlaceholder": "Token",
+    "xpawPlaceholder": "Xpaw",
     "accountLabelDefault": "Account",
     "selectMode": {
       "multi": "Select from start",

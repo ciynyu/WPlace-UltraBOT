@@ -1,4 +1,6 @@
 
+console.log("[WPlace-Helper-Firefox] content.js loaded.");
+
 (function injectPageHook() {
 	try {
 		const s = document.createElement('script');
@@ -13,7 +15,17 @@ window.addEventListener('message', function(ev) {
 	if (!ev || !ev.data) return;
 	const msg = ev.data;
 	if (msg && msg.__wplace && msg.type === 'token_found' && msg.token) {
-		try { chrome.runtime.sendMessage({ type: 'wplace_token_found', token: msg.token, worldX: msg.worldX, worldY: msg.worldY }); } catch (e) {}
+		try {
+			chrome.runtime.sendMessage({
+				type: 'wplace_token_found',
+				token: msg.token || null,
+				xpaw: msg.xpaw || null,
+	               fp: msg.fp || null,
+				worldX: msg.worldX || null,
+				worldY: msg.worldY || null,
+				//cfClearance: msg.cfClearance || null // Pass cfClearance if present
+			});
+		} catch (e) {}
 	}
 });
 

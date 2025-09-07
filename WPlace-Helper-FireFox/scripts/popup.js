@@ -8,14 +8,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const worldYInput = document.getElementById('world-y');
   const copyWorldX = document.getElementById('copy-world-x');
   const copyWorldY = document.getElementById('copy-world-y');
+  const xpawInput = document.getElementById('xpaw-input');
+  const copyXpaw = document.getElementById('copy-xpaw');
   const toggleCapture = document.getElementById('toggle-capture');
   const toggleWrap = document.getElementById('toggle-capture-wrap');
   const toggleLabel = document.getElementById('toggle-capture-label');
  
-  const toggleAntiDetection = document.getElementById('toggle-anti-detection');
-  const toggleAntiDetectionWrap = document.getElementById('toggle-anti-detection-wrap');
-  const toggleAntiDetectionLabel = document.getElementById('toggle-anti-detection-label');
- 
+  // const toggleAntiDetection = document.getElementById('toggle-anti-detection');
+  // const toggleAntiDetectionWrap = document.getElementById('toggle-anti-detection-wrap');
+  // const toggleAntiDetectionLabel = document.getElementById('toggle-anti-detection-label');
+  
   const quickAddCfClearanceInput = document.getElementById('quick-add-cf-clearance-input');
   const pasteCfClearanceButton = document.getElementById('paste-cf-clearance-button');
   const toggleSeassonCfClearance = document.getElementById('toggle-seasson-cf-clearance');
@@ -33,10 +35,13 @@ document.addEventListener('DOMContentLoaded', function() {
   }
  
   // Merge chrome.storage.local.get calls into one
-  chrome.storage.local.get(['wplace_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'wplace_enabled', 'enableAntiDetection', 'seasson_cf_clearance_enabled'], function(result) {
+  chrome.storage.local.get(['wplace_token', 'wplace_xpaw_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'wplace_enabled', 'enableAntiDetection', 'seasson_cf_clearance_enabled'], function(result) {
     // Update Pixel Token and World X/Y
     if (tokenInput) {
       tokenInput.value = (result && result.wplace_token) ? result.wplace_token : 'No token captured yet...';
+    }
+    if (xpawInput) {
+      xpawInput.value = (result && result.wplace_xpaw_token) ? result.wplace_xpaw_token : 'No xpaw token captured yet...';
     }
     if (worldXInput) {
       worldXInput.value = (result && result.wplace_world_x) ? result.wplace_world_x : '-';
@@ -79,6 +84,9 @@ document.addEventListener('DOMContentLoaded', function() {
       if (changes.wplace_token) {
         tokenInput.value = changes.wplace_token.newValue || 'No token captured yet...';
       }
+      if (changes.wplace_xpaw_token) {
+        xpawInput.value = changes.wplace_xpaw_token.newValue || 'No xpaw token captured yet...';
+      }
       if (changes.wplace_world_x) {
         if (worldXInput) worldXInput.value = changes.wplace_world_x.newValue || '-';
       }
@@ -103,19 +111,19 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
  
-  if (toggleAntiDetection) {
-    toggleAntiDetection.addEventListener('change', function() {
-      // Prevent user from enabling anti-detection feature
-      toggleAntiDetection.checked = false;
-      if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(false));
-      if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off';
-      chrome.storage.local.set({ enableAntiDetection: false });
-/*      const enabled = !!toggleAntiDetection.checked;
-      if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(enabled));
-      if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = enabled ? 'On' : 'Off';
-      chrome.storage.local.set({ enableAntiDetection: enabled }); */
-    });
-  }
+  // if (toggleAntiDetection) {
+  //   toggleAntiDetection.addEventListener('change', function() {
+  //     // Prevent user from enabling anti-detection feature
+  //     // toggleAntiDetection.checked = false;
+  //     // if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(false));
+  //     // if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = 'Off';
+  //     // chrome.storage.local.set({ enableAntiDetection: false });
+  // /*      const enabled = !!toggleAntiDetection.checked;
+  //     if (toggleAntiDetectionWrap) toggleAntiDetectionWrap.setAttribute('data-checked', String(enabled));
+  //     if (toggleAntiDetectionLabel) toggleAntiDetectionLabel.textContent = enabled ? 'On' : 'Off';
+  //     chrome.storage.local.set({ enableAntiDetection: enabled }); */
+  //   });
+  // }
  
   if (copyButton) {
     copyButton.addEventListener('click', function() {
@@ -129,7 +137,18 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
- 
+  if (copyXpaw) {
+    copyXpaw.addEventListener('click', function() {
+      if (!xpawInput) return;
+      if (xpawInput.value && xpawInput.value !== 'No xpaw token captured yet...') {
+        navigator.clipboard.writeText(xpawInput.value).then(function() {
+          setStatus('xpaw token copied!');
+          xpawInput.value = 'No xpaw token captured yet...';
+          chrome.storage.local.remove('wplace_xpaw_token');
+        });
+      }
+    });
+  }
   function valOrDash(v) { return (v && String(v).trim()) ? String(v).trim() : '-'; }
  
   if (copyWorldX) {
