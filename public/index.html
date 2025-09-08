@@ -8063,6 +8063,16 @@ function pickNextBestAccountId(excludeIds = []){
                   COLOR_DIFFERENCE_THRESHOLD
               );
 
+          // Bổ sung: Lọc theo Priority Colors ngay tại đây
+          // Nếu priorityColorPaintEnabled đang bật và pixel không nằm trong priorityColors, bỏ qua
+          if (priorityColorPaintEnabled && priorityColors.length > 0 && !priorityColors.includes(targetPixelColorId)) {
+              sx += 1;
+              if (sx >= w) { sx = 0; sy += 1; }
+              if (sy >= h) { sy = 0; }
+              traversed++;
+              continue;
+          }
+
           if (isPixelOpaqueInSign && (selectedOverrideColorId != null || !isSamePaletteIdAsBase(selItem, sx, sy))) {
             const pid = (selectedOverrideColorId != null && selectedOverrideColorId !== 0)
               ? selectedOverrideColorId
@@ -8169,6 +8179,11 @@ function pickNextBestAccountId(excludeIds = []){
         if (l >= 0) {
           if (!buckets[l]) buckets[l] = [];
           buckets[l].push({ x: i % w, y: (i / w) | 0 });
+        }
+        // Bổ sung: Lọc theo Priority Colors ngay tại đây
+        const targetPixelColorId = getItemPixelPaletteId(selItem, p.x, p.y);
+        if (priorityColorPaintEnabled && priorityColors.length > 0 && !priorityColors.includes(targetPixelColorId)) {
+            continue;
         }
       }
       const order = [];
@@ -9178,6 +9193,18 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
         });
         filteredPixels = finalFilteredPixels; // Cập nhật filteredPixels sau khi lọc lại
 
+        // Bổ sung: Lọc theo Priority Colors nếu tính năng được bật
+        if (priorityColorPaintEnabled && priorityColors.length > 0) {
+            const tempFiltered = [];
+            for (const p of filteredPixels) {
+                if (priorityColors.includes(p.c)) {
+                    tempFiltered.push(p);
+                }
+            }
+            filteredPixels = tempFiltered;
+            console.log(`Pixels filtered by priority colors: ${filteredPixels.length}`);
+        }
+
         console.log(`Pixels after advanced filtering: ${filteredPixels.length} pixels. Details: ${JSON.stringify(filteredPixels.slice(0,5))}`);
         // --- END: Filtering Logic ---
 
@@ -9212,15 +9239,16 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
              }
 
              // Ưu tiên 3: General priority colors (nếu priorityColorPaintEnabled)
+             // Đảm bảo ưu tiên này cao hơn premium, chess, v.v.
              if (priorityColorPaintEnabled) {
                  if (a.isPriority && !b.isPriority) return -1;
                  if (!a.isPriority && b.isPriority) return 1;
                  if (a.isPriority && b.isPriority) {
-                     return aPriorityIndex - bPriorityIndex;
+                     return aPriorityIndex - bPriorityIndex; // Sắp xếp theo thứ tự trong list
                  }
              }
 
-            // Ưu tiên 4: Premium colors
+            // Ưu tiên 4: Premium colors (vẫn giữ nguyên, nhưng sẽ có ưu tiên thấp hơn các màu ưu tiên mới)
             if (a.premium && !b.premium) return -1;
             if (!a.premium && b.premium) return 1;
             
