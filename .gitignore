@@ -3,3 +3,4 @@ plan/
 db/accounts.json
 db/settings.json
 db/favorites.json
+proxies.txt
