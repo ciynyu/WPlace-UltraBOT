@@ -2395,6 +2395,10 @@ async function checkFullnessNotify() {
      let isOverlayRemove = false;
      let isDuplicateColorRemove = false; // Biến mới để kiểm soát việc loại bỏ trùng lặp
 
+    // Biến toàn cục mới để lưu trữ trạng thái broken pixel cho auto-select
+    let autoSelectBrokenPixelColorCounts = new Map();
+    let autoSelectBrokenAndPriorityColorThresholdMet = new Map();
+
      function getPaletteRgbById(id){
       const arr = (ACTIVE_PALETTE && Array.isArray(ACTIVE_PALETTE)) ? ACTIVE_PALETTE : PALETTE;
       for (let i = 0; i < arr.length; i++) { if (arr[i].id === id) return arr[i].rgb; }
@@ -7595,6 +7599,7 @@ const autoStartTrack = document.getElementById('auto-start-toggle');
 
     if (brokenPixelPaintToggle) brokenPixelPaintToggle.addEventListener('click', () => {
       brokenPixelPaintEnabled = !brokenPixelPaintEnabled;
+      console.log(`[Debug] Broken Pixel Paint Toggled: ${brokenPixelPaintEnabled}`);
       try { localStorage.setItem('brokenPixelPaint.enabled', brokenPixelPaintEnabled ? '1' : '0'); } catch {}
       updateBrokenPixelPaintUi();
     });
@@ -8016,6 +8021,10 @@ function pickNextBestAccountId(excludeIds = []){
         selectedOverrideColorId = null;
         try { updatePaletteSelectionUi(); } catch {}
 
+        // Reset broken pixel counts for new auto-select session
+        autoSelectBrokenPixelColorCounts.clear();
+        autoSelectBrokenAndPriorityColorThresholdMet.clear();
+
         if (!Array.isArray(readySelectedAccountIds) || readySelectedAccountIds.length === 0) {
           showToast(t('messages.selectAccountFirst'), 'error', 2000);
           return;
@@ -8126,15 +8135,32 @@ function pickNextBestAccountId(excludeIds = []){
               continue;
           }
 
+          // Tính toán brokenAndPriorityColorThresholdMet sử dụng biến toàn cục
+          if (brokenPixelPaintEnabled && isActuallyBroken && worldPixelColorId != null && brokenPixelPriorityColors.includes(worldPixelColorId)) {
+              autoSelectBrokenPixelColorCounts.set(worldPixelColorId, (autoSelectBrokenPixelColorCounts.get(worldPixelColorId) || 0) + 1);
+          }
+          for (let [colorId, count] of autoSelectBrokenPixelColorCounts) {
+              if (count >= minizineToDetectThreshold) {
+                  autoSelectBrokenAndPriorityColorThresholdMet.set(colorId, true);
+              }
+          }
+
           if (isPixelOpaqueInSign && (selectedOverrideColorId != null || !isSamePaletteIdAsBase(selItem, sx, sy))) {
             let pidToUse = (selectedOverrideColorId != null && selectedOverrideColorId !== 0)
               ? selectedOverrideColorId
               : getItemPixelPaletteId(selItem, sx, sy);
 
-            if (brokenPixelPaintEnabled && isActuallyBroken && brokenPixelPriorityColors.includes(targetPixelColorId)) {
-                // Khi brokenPixelPaintEnabled được kích hoạt, sử dụng targetPixelColorId từ brokenPixelPriorityColors
-                // không quan tâm đến brokenAndPriorityColorThresholdMet (chỉ cho tự động chọn)
-                pidToUse = targetPixelColorId; // Sử dụng màu từ brokenPixelPriorityColors
+            if (brokenPixelPaintEnabled) {
+              if (isActuallyBroken && worldPixelColorId != null && brokenPixelPriorityColors.includes(worldPixelColorId) && autoSelectBrokenAndPriorityColorThresholdMet.has(worldPixelColorId)) {
+                pidToUse = targetPixelColorId; // Tô bằng màu đúng từ template
+              } else {
+                // Khi bật chế độ broken, chỉ chọn pixel broken đạt ngưỡng, bỏ qua TẤT CẢ các pixel khác.
+                sx += 1;
+                if (sx >= w) { sx = 0; sy += 1; }
+                if (sy >= h) { sy = 0; }
+                traversed++;
+                continue;
+              }
             }
                     
             if (pidToUse != null && pidToUse !== 0 && isPremiumColorId(pidToUse)){
@@ -8167,6 +8193,10 @@ function pickNextBestAccountId(excludeIds = []){
       const w = selItem.image.naturalWidth|0;
       const h = selItem.image.naturalHeight|0;
       if (!(w && h)) return 0;
+
+      // Reset broken pixel counts for new auto-select session (frame mode)
+      autoSelectBrokenPixelColorCounts.clear();
+      autoSelectBrokenAndPriorityColorThresholdMet.clear();
 
       let minX = 0, minY = 0, maxX = w, maxY = h;
       if (isOverlayRemove && limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible) {
@@ -8239,10 +8269,51 @@ function pickNextBestAccountId(excludeIds = []){
           if (!buckets[l]) buckets[l] = [];
           buckets[l].push({ x: i % w, y: (i / w) | 0 });
         }
-        // Bổ sung: Lọc theo Priority Colors ngay tại đây
+        // Áp dụng Chess Pattern Paint logic
+        if (chessPaintEnabled && ((p.x + p.y) % 2 !== 0)) { // Skip if not on a "black" square
+            continue;
+        }
+
+        // Áp dụng Limit to Overlay Area logic
+        if (limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible) {
+            const overlayRect = savedOverlays[selectedOverlayIndex].rect;
+            const wx = Math.round((selItem.worldX || 0) + p.x);
+            const wy = Math.round((selItem.worldY || 0) + p.y);
+            if (wx < overlayRect.x || wx >= (overlayRect.x + overlayRect.w) ||
+                wy < overlayRect.y || wy >= (overlayRect.y + overlayRect.h)) {
+                continue; // Skip to the next iteration
+            }
+        }
+
+        // Bổ sung: Lọc theo Priority Colors
         const targetPixelColorId = getItemPixelPaletteId(selItem, p.x, p.y);
         if (priorityColorPaintEnabled && priorityColors.length > 0 && !priorityColors.includes(targetPixelColorId)) {
             continue;
+        }
+
+        // Tính toán isActuallyBroken và worldPixelColorId cho pixel hiện tại
+        const currentWorldX = Math.round((selItem.worldX || 0) + p.x);
+        const currentWorldY = Math.round((selItem.worldY || 0) + p.y);
+        const worldPixelColor = getCompositeColorAtWorld(currentWorldX, currentWorldY);
+        const worldPixelColorId = worldPixelColor ? rgbToPaletteId(worldPixelColor.r, worldPixelColor.g, worldPixelColor.b) : null;
+        
+        const targetRgb = getPaletteRgbById(targetPixelColorId);
+        const currentRgb = worldPixelColor ? [worldPixelColor.r, worldPixelColor.g, worldPixelColor.b] : null;
+
+        const isActuallyBroken = isOpaquePixel(selItem, p.x, p.y) && targetRgb && currentRgb &&
+            areColorsSignificantlyDifferent(
+                {r: targetRgb[0], g: targetRgb[1], b: targetRgb[2]},
+                {r: currentRgb[0], g: currentRgb[1], b: currentRgb[2]},
+                COLOR_DIFFERENCE_THRESHOLD
+            );
+        const isCurrentPixelMatched = isOpaquePixel(selItem, p.x, p.y) && (worldPixelColorId === targetPixelColorId) && (worldPixelColor && worldPixelColor.a > 0);
+
+        // Tính toán brokenPixelCounts và brokenAndPriorityColorThresholdMet cho autoSelectFrameFirst
+        if (brokenPixelPaintEnabled && isActuallyBroken && worldPixelColorId != null && brokenPixelPriorityColors.includes(worldPixelColorId)) {
+            autoSelectBrokenPixelColorCounts.set(worldPixelColorId, (autoSelectBrokenPixelColorCounts.get(worldPixelColorId) || 0) + 1);
+            if (autoSelectBrokenPixelColorCounts.get(worldPixelColorId) >= minizineToDetectThreshold) {
+                autoSelectBrokenAndPriorityColorThresholdMet.set(worldPixelColorId, true);
+            }
         }
       }
       const order = [];
@@ -8284,13 +8355,17 @@ function pickNextBestAccountId(excludeIds = []){
         
         let pidToUse = (selectedOverrideColorId != null && selectedOverrideColorId !== 0) ? selectedOverrideColorId : getItemPixelPaletteId(selItem, p.x, p.y);
 
-        if (brokenPixelPaintEnabled && isActuallyBroken && brokenPixelPriorityColors.includes(targetPixelColorId)) {
-            // Khi brokenPixelPaintEnabled được kích hoạt, các pixel bị lỗi sẽ luôn được đặt màu đen (ID 1)
-            // không quan tâm đến brokenAndPriorityColorThresholdMet (chỉ cho tự động chọn)
-            pidToUse = 1; // ID 1 cho màu đen
-        } else if (selectedOverrideColorId == null && isSamePaletteIdAsBase(selItem, p.x, p.y)) {
-            // Nếu không có override color và màu giống với base, bỏ qua (không tô lại pixel đã đúng màu)
+        if (brokenPixelPaintEnabled) {
+          // Khi chế độ broken được bật, chỉ và chỉ chọn các pixel broken ưu tiên đã đạt ngưỡng.
+          if (isActuallyBroken && worldPixelColorId != null && brokenPixelPriorityColors.includes(worldPixelColorId) && autoSelectBrokenAndPriorityColorThresholdMet.has(worldPixelColorId)) {
+            pidToUse = targetPixelColorId; // Tô bằng màu đúng từ template
+          } else {
+            // Nếu không phải pixel mục tiêu, bỏ qua hoàn toàn, không xét đến các điều kiện khác.
             continue;
+          }
+        } else if (selectedOverrideColorId == null && isSamePaletteIdAsBase(selItem, p.x, p.y)) {
+          // Logic này chỉ chạy khi chế độ broken TẮT.
+          continue;
         }
         if (pidToUse != null && pidToUse !== 0 && isPremiumColorId(pidToUse)) {
           const remain = getPremiumColorRemainingLimit(pidToUse);
@@ -8530,10 +8605,6 @@ if (startBtn) {
       return;
     }
     const data = buildSelectedExportForItem(sel);
-    // Gọi hàm báo cáo mới ngay sau khi data được tạo
-    //try {
-   //   getRemainingPaintablePixelSummary(data.filteredPixels); // Truyền filteredPixels để phân tích
-    //} catch (e) { console.error('Error calling getRemainingPaintablePixelSummary:', e); }
 
     const authToken = (readyTokenInput && readyTokenInput.value) ? String(readyTokenInput.value) : '';
 
@@ -8987,17 +9058,24 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
         let pidToUse = selectedOverrideColorId != null ? selectedOverrideColorId : getItemPixelPaletteId(selItem, lx, ly);
 
         // Thêm điều kiện isDuplicateColorRemove
-        // Nếu isDuplicateColorRemove là false (bị tắt) VÀ pixel hiện tại đã khớp (isCurrentPixelMatched là true)
+        // Nếu isDuplicateColorRemove là true (bật) VÀ pixel hiện tại đã khớp (isCurrentPixelMatched là true)
         // thì bỏ qua việc thêm pixel này vào lựa chọn.
         if (!isDuplicateColorRemove && isCurrentPixelMatched) {
-            return false; // Bỏ qua pixel nếu không cần loại bỏ trùng lặp và pixel đã khớp màu trên bản đồ
+            return false; // Bỏ qua pixel nếu loại bỏ trùng lặp được bật và pixel đã khớp màu trên bản đồ
         }
         
+        // Cập nhật logic cho Broken Pixel Paint:
         if (brokenPixelPaintEnabled && isActuallyBroken && brokenPixelPriorityColors.includes(targetPixelColorId)) {
-            if (brokenAndPriorityColorThresholdMet.has(targetPixelColorId)) { // Only if threshold met
-                pidToUse = 1; // ID 1 for black color
+            if (autoSelectBrokenAndPriorityColorThresholdMet.has(targetPixelColorId)) { // If threshold met
+                pidToUse = targetPixelColorId; // Use the actual target color ID
             } else {
-                pidToUse = worldPixelColorId; // Fallback to current world color if threshold not met
+                // If broken pixel paint is enabled but threshold not met for this color,
+                // do not select this pixel for broken paint, but check if it's already selected as a normal pixel.
+                // If no override color and it matches the base, skip.
+                if (selectedOverrideColorId == null && isCurrentPixelMatched) {
+                    return false;
+                }
+                pidToUse = worldPixelColorId; // Fallback to current world color if threshold not met for broken pixel logic
             }
         }
 
@@ -9287,29 +9365,40 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
       console.log('Raw debug logs:', debugLogs);
 
 
-      let filteredPixels = allPixels.slice(); // Mặc định tất cả các pixel đều được đưa vào filteredPixels
+      let filteredPixels = allPixels.slice(); // Start with all collected pixels
 
-      // Logic lọc trùng lặp đã bị vô hiệu hóa theo yêu cầu.
-      // Do đó, filteredPixels luôn bằng allPixels và không áp dụng lọc trùng lặp ở đây.
-      filteredPixels = allPixels.slice();
-      console.log('Duplicate filtering is disabled. All collected pixels are included.');
+      // Filtering logic based on isDuplicateColorRemove
+      if (isDuplicateColorRemove) {
+        let tempFiltered = [];
+        filteredPixels.forEach(p => {
+          // Only include pixels that are NOT matched (i.e., need painting) if isDuplicateColorRemove is true.
+          if (!p.isMatched) {
+            tempFiltered.push(p);
+          }
+        });
+        filteredPixels = tempFiltered;
+        console.log(`Pixels after isDuplicateColorRemove filtering: ${filteredPixels.length}`);
+      } else {
+        // If isDuplicateColorRemove is false, do not filter based on matching status here.
+        // The `filteredPixels` remains the same as `allPixels` initially.
+        console.log('isDuplicateColorRemove is disabled. No filtering based on pixel matching status applied.');
+      }
       
       // Sorting Logic (Only if Advanced Paint is Enabled)
       if (advancedPaintEnabled) {
         console.log('Advanced Paint is Enabled. Starting advanced filtering and sorting...');
         // --- START: Logic to calculate if the broken color priority threshold is met ---
+        // These counts are for the current buildSelectedExportForItem execution, not for auto-selection logic
         let brokenPriorityColorCounts = new Map();
+        let brokenAndPriorityColorThresholdMet = new Map(); // Declare it here
         if (brokenPixelPaintEnabled) {
-            console.log('Broken Pixel Paint Enabled. Counting broken priority colors...');
+            console.log('[Debug Build Export] Broken Pixel Paint Enabled. Counting broken priority colors...');
             for (const p of filteredPixels) {
-                // Re-calculate isBroken for accuracy, since the original `rec.isBroken` comes from `addPixelSelection`
-                // which might have happened when the world state was different.
-                // We need to compare current world color with target image pixel.
                 const targetPixelColorId = p.c;
                 const currentWorldColor = getCompositeColorAtWorld(p.x, p.y);
                 const targetRgb = getPaletteRgbById(targetPixelColorId);
                 const currentRgb = currentWorldColor ? [currentWorldColor.r, currentWorldColor.g, currentWorldColor.b] : null;
-                const isPixelOpaque = isOpaquePixel(item, p.x - (item.worldX || 0), p.y - (item.worldY || 0)); // Re-evaluate based on item's opacity
+                const isPixelOpaque = (item && item.image) ? isOpaquePixel(item, p.x - (item.worldX || 0), p.y - (item.worldY || 0)) : true;
                 
                 const currentIsBroken = isPixelOpaque && targetRgb && currentRgb &&
                     areColorsSignificantlyDifferent(
@@ -9322,20 +9411,26 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
                 
                 if (currentIsBroken && currentIsBrokenPixelPriority) {
                     brokenPriorityColorCounts.set(targetPixelColorId, (brokenPriorityColorCounts.get(targetPixelColorId) || 0) + 1);
-                    // Update the pixel object with fresh broken status
-                    p.isBroken = true;
+                    p.isBroken = true; // Update pixel object with fresh status
                     p.isBrokenPixelPriority = true;
+                    console.log(`[Debug Build Export] Pixel (${p.x},${p.y}) isBroken and isBrokenPixelPriority. Count for ${targetPixelColorId}: ${brokenPriorityColorCounts.get(targetPixelColorId)}`);
                 } else {
                     p.isBroken = false;
                     p.isBrokenPixelPriority = false;
+                    console.log(`[Debug Build Export] Pixel (${p.x},${p.y}) is NOT broken/brokenPriority. (isBroken: ${currentIsBroken}, isBrokenPixelPriority: ${currentIsBrokenPixelPriority})`);
                 }
-                // Recalculate isMatched as well
                 const worldPixelColorId = currentWorldColor ? rgbToPaletteId(currentWorldColor.r, currentWorldColor.g, currentWorldColor.b) : null;
                 p.isMatched = isPixelOpaque && (worldPixelColorId === targetPixelColorId) && (currentWorldColor && currentWorldColor.a > 0);
             }
+            // Populate brokenAndPriorityColorThresholdMet based on calculated counts
+            for (let [colorId, count] of brokenPriorityColorCounts) {
+                if (count >= minizineToDetectThreshold) {
+                    brokenAndPriorityColorThresholdMet.set(colorId, true);
+                }
+            }
         }
 
-        let brokenAndPriorityColorThresholdMet = new Map();
+        
         for (let [colorId, count] of brokenPriorityColorCounts) {
             if (count >= minizineToDetectThreshold) {
                 brokenAndPriorityColorThresholdMet.set(colorId, true);
@@ -9406,30 +9501,41 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
             const aPriorityIndex = getPriorityIndex(a.c, priorityColors);
             const bPriorityIndex = getPriorityIndex(b.c, priorityColors);
 
+        console.log(`[Debug Sort] Comparing pixel A(${a.x},${a.y}, ID:${a.c}) and B(${b.x},${b.y}, ID:${b.c})`);
+        console.log(`[Debug Sort] A: isBroken=${a.isBroken}, isBrokenPixelPriority=${a.isBrokenPixelPriority}, isPriority=${a.isPriority}, premium=${a.premium}`);
+        console.log(`[Debug Sort] B: isBroken=${b.isBroken}, isBrokenPixelPriority=${b.isBrokenPixelPriority}, isPriority=${b.isPriority}, premium=${b.premium}`);
+
+
              // Ưu tiên 1: Broken Pixel Priority Colors VÀ màu đó đã đạt ngưỡng (nếu brokenPixelPaintEnabled)
              if (brokenPixelPaintEnabled) {
                  const aIsThresholdMetForColor = a.isBroken && a.isBrokenPixelPriority && brokenAndPriorityColorThresholdMet.has(a.c);
                  const bIsThresholdMetForColor = b.isBroken && b.isBrokenPixelPriority && brokenAndPriorityColorThresholdMet.has(b.c);
+                 
+                 console.log(`[Debug Sort] Broken Pixel Paint Enabled. A threshold met: ${aIsThresholdMetForColor}, B threshold met: ${bIsThresholdMetForColor}`);
 
                  if (aIsThresholdMetForColor && !bIsThresholdMetForColor) return -1;
                  if (!aIsThresholdMetForColor && bIsThresholdMetForColor) return 1;
                  if (aIsThresholdMetForColor && bIsThresholdMetForColor) {
+                     console.log(`[Debug Sort] Both A and B met threshold. Sorting by broken pixel priority index: ${aBrokenPixelPriorityIndex} vs ${bBrokenPixelPriorityIndex}`);
                      return aBrokenPixelPriorityIndex - bBrokenPixelPriorityIndex; // Sắp xếp theo thứ tự trong list
                  }
              }
-
+ 
              // Ưu tiên 2: General broken pixels (nếu brokenPixelPaintEnabled)
              if (brokenPixelPaintEnabled) {
+                console.log(`[Debug Sort] General Broken Pixel check. A.isBroken: ${a.isBroken}, B.isBroken: ${b.isBroken}`);
                  if (a.isBroken && !b.isBroken) return -1;
                  if (!a.isBroken && b.isBroken) return 1;
              }
-
+ 
              // Ưu tiên 3: General priority colors (nếu priorityColorPaintEnabled)
              // Đảm bảo ưu tiên này cao hơn premium, chess, v.v.
              if (priorityColorPaintEnabled) {
+                console.log(`[Debug Sort] Priority Color Paint Enabled. A.isPriority: ${a.isPriority}, B.isPriority: ${b.isPriority}`);
                  if (a.isPriority && !b.isPriority) return -1;
                  if (!a.isPriority && b.isPriority) return 1;
                  if (a.isPriority && b.isPriority) {
+                     console.log(`[Debug Sort] Both A and B are priority. Sorting by priority index: ${aPriorityIndex} vs ${bPriorityIndex}`);
                      return aPriorityIndex - bPriorityIndex; // Sắp xếp theo thứ tự trong list
                  }
              }
@@ -9548,6 +9654,7 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
         console.log({ colors: data.colors, coords: data.coords, t });
       } catch {}
     }
+
 
     if (readyTokenInput) {
       readyTokenInput.addEventListener('input', () => {
