@@ -2392,6 +2392,8 @@ async function checkFullnessNotify() {
      const READY_CLICK_MOVE_TOLERANCE = 4;
      const PRIORITY_COLORS_STORAGE_KEY = 'autoPaint.priorityColors';
      const BROKEN_PIXEL_COLORS_STORAGE_KEY = 'autoPaint.brokenPixelPriorityColors';
+     let isOverlayRemove = false;
+     let isDuplicateColorRemove = false; // Biến mới để kiểm soát việc loại bỏ trùng lặp
 
      function getPaletteRgbById(id){
       const arr = (ACTIVE_PALETTE && Array.isArray(ACTIVE_PALETTE)) ? ACTIVE_PALETTE : PALETTE;
@@ -2513,6 +2515,16 @@ async function checkFullnessNotify() {
       } catch { return null; }
     }
 
+    // Commented out: Original isOpaquePixel function
+    /*
+    function isOpaquePixel(item, sx, sy){
+      const id = ensureItemImageData(item);
+      if (!id) return false;
+      if (sx < 0 || sy < 0 || sx >= id.width || sy >= id.height) return false;
+      const a = id.data[((id.width * sy + sx) << 2) + 3];
+      return a !== 0;
+    }
+    */
     function isOpaquePixel(item, sx, sy){
       const id = ensureItemImageData(item);
       if (!id) return false;
@@ -8120,7 +8132,9 @@ function pickNextBestAccountId(excludeIds = []){
               : getItemPixelPaletteId(selItem, sx, sy);
 
             if (brokenPixelPaintEnabled && isActuallyBroken && brokenPixelPriorityColors.includes(targetPixelColorId)) {
-                pidToUse = worldPixelColorId; // Use current world color
+                // Khi brokenPixelPaintEnabled được kích hoạt, sử dụng targetPixelColorId từ brokenPixelPriorityColors
+                // không quan tâm đến brokenAndPriorityColorThresholdMet (chỉ cho tự động chọn)
+                pidToUse = targetPixelColorId; // Sử dụng màu từ brokenPixelPriorityColors
             }
                     
             if (pidToUse != null && pidToUse !== 0 && isPremiumColorId(pidToUse)){
@@ -8155,7 +8169,7 @@ function pickNextBestAccountId(excludeIds = []){
       if (!(w && h)) return 0;
 
       let minX = 0, minY = 0, maxX = w, maxY = h;
-      if (limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible) {
+      if (isOverlayRemove && limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible) {
           const overlayRect = savedOverlays[selectedOverlayIndex].rect;
           // Convert overlay world coordinates to item-local coordinates
           minX = Math.max(0, overlayRect.x - (selItem.worldX || 0));
@@ -8271,15 +8285,18 @@ function pickNextBestAccountId(excludeIds = []){
         let pidToUse = (selectedOverrideColorId != null && selectedOverrideColorId !== 0) ? selectedOverrideColorId : getItemPixelPaletteId(selItem, p.x, p.y);
 
         if (brokenPixelPaintEnabled && isActuallyBroken && brokenPixelPriorityColors.includes(targetPixelColorId)) {
-            pidToUse = worldPixelColorId; // Use current world color
-        } else {
-          let pidToUse = (selectedOverrideColorId != null && selectedOverrideColorId !== 0) ? selectedOverrideColorId : getItemPixelPaletteId(selItem, p.x, p.y);
+            // Khi brokenPixelPaintEnabled được kích hoạt, các pixel bị lỗi sẽ luôn được đặt màu đen (ID 1)
+            // không quan tâm đến brokenAndPriorityColorThresholdMet (chỉ cho tự động chọn)
+            pidToUse = 1; // ID 1 cho màu đen
+        } else if (selectedOverrideColorId == null && isSamePaletteIdAsBase(selItem, p.x, p.y)) {
+            // Nếu không có override color và màu giống với base, bỏ qua (không tô lại pixel đã đúng màu)
+            continue;
         }
-        if (brokenPixelPaintEnabled && isActuallyBroken && brokenPixelPriorityColors.includes(targetPixelColorId)) { pidToUse = worldPixelColorId; } else if (selectedOverrideColorId == null && isSamePaletteIdAsBase(selItem, p.x, p.y)) { continue; }
         if (pidToUse != null && pidToUse !== 0 && isPremiumColorId(pidToUse)) {
           const remain = getPremiumColorRemainingLimit(pidToUse);
           if (!(remain > 0)) break;
         }
+
         const did = addPixelSelection(selItem, p.x, p.y, pidToUse, isActuallyBroken, isCurrentPixelMatched);
         if (did) added++;
       }
@@ -8915,10 +8932,17 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
             }
         } else {
             // If no override color, directly compare image color with map color
-            colorDiffers = !isSamePaletteIdAsBase(selItem, lx, ly);
+            if (isDuplicateColorRemove) {
+                colorDiffers = !isSamePaletteIdAsBase(selItem, lx, ly);
+            } else {
+                colorDiffers = true; // If duplicate removal is off, always consider it differs for selection purposes
+            }
         }
 
-        if (!colorDiffers) return false;
+        // Only return false (don't add pixel) if colors are the same AND duplicate removal is active
+        if (!colorDiffers && isDuplicateColorRemove) {
+            return false;
+        }
 
         // Early condition check: pixel limit
         const limit = Math.max(0, Number(getReadySelectionLimit()) || 0);
@@ -8961,9 +8985,20 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
         const isCurrentPixelMatched = isOpaquePixel(selItem, lx, ly) && (worldPixelColorId === targetPixelColorId) && (worldPixelColor && worldPixelColor.a > 0);
         
         let pidToUse = selectedOverrideColorId != null ? selectedOverrideColorId : getItemPixelPaletteId(selItem, lx, ly);
+
+        // Thêm điều kiện isDuplicateColorRemove
+        // Nếu isDuplicateColorRemove là false (bị tắt) VÀ pixel hiện tại đã khớp (isCurrentPixelMatched là true)
+        // thì bỏ qua việc thêm pixel này vào lựa chọn.
+        if (!isDuplicateColorRemove && isCurrentPixelMatched) {
+            return false; // Bỏ qua pixel nếu không cần loại bỏ trùng lặp và pixel đã khớp màu trên bản đồ
+        }
         
         if (brokenPixelPaintEnabled && isActuallyBroken && brokenPixelPriorityColors.includes(targetPixelColorId)) {
-            pidToUse = worldPixelColorId; // Use current world color
+            if (brokenAndPriorityColorThresholdMet.has(targetPixelColorId)) { // Only if threshold met
+                pidToUse = 1; // ID 1 for black color
+            } else {
+                pidToUse = worldPixelColorId; // Fallback to current world color if threshold not met
+            }
         }
 
         const didAdd = addPixelSelection(selItem, lx, ly, pidToUse, isActuallyBroken, isCurrentPixelMatched);
@@ -9178,7 +9213,7 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
           const wy = rec.wy;
 
           // Điều kiện mới để lọc pixel theo limitToOverlayArea khi ở chế độ Global
-          if (limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible !== false) {
+          if (isOverlayRemove && limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible !== false) {
               const overlayRect = savedOverlays[selectedOverlayIndex].rect;
               if (wx < overlayRect.x || wx >= (overlayRect.x + overlayRect.w) ||
                   wy < overlayRect.y || wy >= (overlayRect.y + overlayRect.h)) {
@@ -9186,21 +9221,27 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
               }
           }
 
-          const targetColor = getPaletteRgbById(rec.c); // Dùng rec.c vì rec.colorId có thể là null
-          const currentColor = getCompositeColorAtWorld(wx, wy);
-          debugLogs.push(`Global Mode Pixel (${rec.wx}, ${rec.wy}): ColorId=${rec.colorId}, TargetRGB=${JSON.stringify(targetColor)}, CurrentRGB=${JSON.stringify(currentColor)}`);
+          // Tính toán isBroken và isMatched cho pixel hiện tại (Global Mode)
+          const targetColorIdGlobal = rec.colorId;
+          const currentWorldXGlobal = rec.wx;
+          const currentWorldYGlobal = rec.wy;
+          const worldPixelColorGlobal = getCompositeColorAtWorld(currentWorldXGlobal, currentWorldYGlobal);
+          const worldPixelColorIdGlobal = worldPixelColorGlobal ? rgbToPaletteId(worldPixelColorGlobal.r, worldPixelColorGlobal.g, worldPixelColorGlobal.b) : null;
+          
+          const targetRgbGlobal = getPaletteRgbById(targetColorIdGlobal);
+          const currentRgbGlobal = worldPixelColorGlobal ? [worldPixelColorGlobal.r, worldPixelColorGlobal.g, worldPixelColorGlobal.b] : null;
 
-          const pixelMatched = (targetColor && currentColor &&
-                                 targetColor[0] === currentColor.r &&
-                                 targetColor[1] === currentColor.g &&
-                                 targetColor[2] === currentColor.b &&
-                                 currentColor.a > 0);
-          const broken = (targetColor && currentColor && areColorsSignificantlyDifferent(
-            {r: targetColor[0], g: targetColor[1], b: targetColor[2]},
-            currentColor,
-            COLOR_DIFFERENCE_THRESHOLD
-          ));
-          allPixels.push(createPixelObj(rec.colorId, rec.wx, rec.wy, { isBroken: rec.isBroken, isMatched: rec.isMatched }));
+          const isPixelOpaqueInSignGlobal = true; // Luôn coi là opaque trong global mode, do đã thay thế isOpaquePixel
+
+          const isBrokenGlobal = isPixelOpaqueInSignGlobal && targetRgbGlobal && currentRgbGlobal &&
+              areColorsSignificantlyDifferent(
+                  {r: targetRgbGlobal[0], g: targetRgbGlobal[1], b: targetRgbGlobal[2]},
+                  {r: currentRgbGlobal[0], g: currentRgbGlobal[1], b: currentRgbGlobal[2]},
+                  COLOR_DIFFERENCE_THRESHOLD
+              );
+          const isMatchedGlobal = isPixelOpaqueInSignGlobal && (worldPixelColorIdGlobal === targetColorIdGlobal) && (worldPixelColorGlobal && worldPixelColorGlobal.a > 0);
+          
+          allPixels.push(createPixelObj(rec.colorId, rec.wx, rec.wy, { isBroken: isBrokenGlobal, isMatched: isMatchedGlobal }));
         });
       } else if (map) {
         map.forEach((rec) => {
@@ -9210,44 +9251,48 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
           const wy = Math.round((item.worldY || 0) + ly);
 
           // Điều kiện mới để lọc pixel theo limitToOverlayArea khi ở chế độ Map (tức là theo hình ảnh sign)
-          if (limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible !== false) {
+          if (isOverlayRemove && limitToOverlayArea && selectedOverlayIndex !== -1 && savedOverlays[selectedOverlayIndex] && savedOverlays[selectedOverlayIndex].isVisible !== false) {
               const overlayRect = savedOverlays[selectedOverlayIndex].rect;
               if (wx < overlayRect.x || wx >= (overlayRect.x + overlayRect.w) ||
                   wy < overlayRect.y || wy >= (overlayRect.y + overlayRect.h)) {
                   return; // Bỏ qua pixel nếu nằm ngoài vùng overlay
               }
           }
-          allPixels.push(createPixelObj(rec.colorId, wx, wy, { isBroken: rec.isBroken, isMatched: rec.isMatched }));
+          // Tính toán isBroken và isMatched cho pixel hiện tại (Per-image mode)
+          const targetColorIdPerImage = rec.colorId;
+          const currentWorldXPerImage = wx;
+          const currentWorldYPerImage = wy;
+          const worldPixelColorPerImage = getCompositeColorAtWorld(currentWorldXPerImage, currentWorldYPerImage);
+          const worldPixelColorIdPerImage = worldPixelColorPerImage ? rgbToPaletteId(worldPixelColorPerImage.r, worldPixelColorPerImage.g, worldPixelColorPerImage.b) : null;
+          
+          const targetRgbPerImage = getPaletteRgbById(targetColorIdPerImage);
+          const currentRgbPerImage = worldPixelColorPerImage ? [worldPixelColorPerImage.r, worldPixelColorPerImage.g, worldPixelColorPerImage.b] : null;
+
+          const isPixelOpaqueInSignPerImage = isOpaquePixel(item, lx, ly);
+
+          const isBrokenPerImage = isPixelOpaqueInSignPerImage && targetRgbPerImage && currentRgbPerImage &&
+              areColorsSignificantlyDifferent(
+                  {r: targetRgbPerImage[0], g: targetRgbPerImage[1], b: targetRgbPerImage[2]},
+                  {r: currentRgbPerImage[0], g: currentRgbPerImage[1], b: currentRgbPerImage[2]},
+                  COLOR_DIFFERENCE_THRESHOLD
+              );
+          const isMatchedPerImage = isPixelOpaqueInSignPerImage && (worldPixelColorIdPerImage === targetColorIdPerImage) && (worldPixelColorPerImage && worldPixelColorPerImage.a > 0);
+
+          allPixels.push(createPixelObj(rec.colorId, wx, wy, { isBroken: isBrokenPerImage, isMatched: isMatchedPerImage }));
         });
       }
       
       console.log('Total pixels collected (allPixels):', allPixels.length, allPixels.slice(0, 5));
       console.log('Detailed collected pixels (first 10):', allPixels.slice(0, 10));
       console.log('Raw debug logs:', debugLogs);
-      let filteredPixels = [];
-      const pixelMap = new Map(); // Dùng để loại bỏ trùng lặp nếu có
-      console.log('Starting duplicate filtering...');
 
-      // Filtering logic: Remove duplicate pixels (based on x,y coordinates)
-      allPixels.forEach(p => {
-          const key = `${p.x},${p.y}`;
-          if (!pixelMap.has(key)) {
-              filteredPixels.push(p);
-              pixelMap.set(key, p);
-          }
-      });
-      
-      console.log(`Initial collected pixels: ${allPixels.length}`);
-      allPixels.forEach(p => {
-          const key = `${p.x},${p.y}`;
-          if (!pixelMap.has(key)) {
-              filteredPixels.push(p);
-              pixelMap.set(key, p);
-          } else {
-              console.log(`Duplicate pixel removed: (${p.x}, ${p.y})`);
-          }
-      });
-      console.log(`Pixels after duplicate filtering: ${filteredPixels.length}`);
+
+      let filteredPixels = allPixels.slice(); // Mặc định tất cả các pixel đều được đưa vào filteredPixels
+
+      // Logic lọc trùng lặp đã bị vô hiệu hóa theo yêu cầu.
+      // Do đó, filteredPixels luôn bằng allPixels và không áp dụng lọc trùng lặp ở đây.
+      filteredPixels = allPixels.slice();
+      console.log('Duplicate filtering is disabled. All collected pixels are included.');
       
       // Sorting Logic (Only if Advanced Paint is Enabled)
       if (advancedPaintEnabled) {
@@ -9769,6 +9814,8 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
   </script>
 </body>
 </html> 
+
+
 
 
 
