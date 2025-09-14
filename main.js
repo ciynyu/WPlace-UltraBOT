@@ -74,8 +74,8 @@ function parseUserAgent(uaString) {
 let DEBUG = false;
 let DEBUG_MASK = !(process.env.DEBUG_MASK === '0' || process.env.DEBUG_MASK === 'false');
 let DEBUG_INBOUND_ENABLED = false; // Inbound logging permanently off
-function enableDebug() { DEBUG = true; }
-function enableDebugFull() { DEBUG = true; DEBUG_MASK = false; }
+function enableDebug() { DEBUG = false; }
+function enableDebugFull() { DEBUG = false; DEBUG_MASK = false; }
 function maskToken(str) {
   if (!str) return '';
   if (!DEBUG_MASK) return String(str);
@@ -1347,6 +1347,183 @@ function startServer(port, host) {
       // Remove .catch()
       return;
     }
+
+    // Proxy update profile to backend.wplace.live
+    if (parsed.pathname === '/api/me/update' && req.method === 'POST') {
+      const body = req.body; // Use the already read body
+      try {
+        const jToken = body && typeof body.j === 'string' ? body.j : ''; // Extract jToken from body
+        const name = (body && typeof body.name === 'string') ? body.name.trim() : acc.accountname || '';
+        const showLastPixel = (body && typeof body.showLastPixel === 'boolean') ? body.showLastPixel : null;
+        const discord = (body && typeof body.discord === 'string') ? body.discord : '';
+
+        if (!jToken) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'invalid payload: jToken missing' }));
+          return;
+        }
+
+        const accounts = readJson(ACCOUNTS_FILE, []);
+        const acc = accounts.find(a => a && typeof a.token === 'string' && a.token === jToken);
+
+        if (!acc) {
+          res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'account not found' }));
+          return;
+        }
+
+        const cf = acc && typeof acc.cf_clearance === 'string' ? acc.cf_clearance : '';
+        if (!cf || cf.length < 30) {
+          try { deactivateAccountByToken(jToken); } catch {}
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'cf_clearance missing for account' }));
+          return;
+        }
+        
+        const remotePath = '/me/update';
+        const payloadObj = {};
+        if (name !== '') {
+          payloadObj.name = name;
+        } else if (acc.accountname) { // Use accountname if name is not provided
+          payloadObj.name = acc.accountname;
+        }
+        if (showLastPixel !== null) payloadObj.showLastPixel = showLastPixel;
+        if (discord) payloadObj.discord = discord;
+        const payload = JSON.stringify(payloadObj);
+
+        try {
+          const gotScraping = await getGotScrapingFn();
+          if (gotScraping) {
+            if (useProxy) {
+              debugLog('INFO', `Update Profile POST using proxy: ${getRandomProxy() || 'Direct'}`);
+            }
+            debugLog('OUTBOUND', 'proxy update profile POST begin (got-scraping)', { path: remotePath, body: payload });
+            const r = await gotScraping({
+              url: 'https://backend.wplace.live' + remotePath,
+              method: 'POST',
+              headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json, text/plain, */*',
+                'Origin': 'https://wplace.live',
+                'Referer': 'https://wplace.live/',
+                'Content-Type': 'application/json',
+                'Cookie': `j=${jToken}; cf_clearance=${cf}`
+              },
+              body: payload,
+              throwHttpErrors: false,
+              decompress: true,
+              agent: { https: useProxy ? new HttpsProxyAgent(getRandomProxy()) : HTTPS_AGENT },
+              timeout: { request: 30000 }
+            });
+            const status = r && (r.statusCode || r.status) || 0;
+            const text = r && (typeof r.body === 'string' ? r.body : (r.body ? String(r.body) : ''));
+            debugLog('OUTBOUND_RESPONSE', 'proxy update profile POST end (got-scraping)', { status, bodyPreview: String(text || '').slice(0, 300) });
+            
+            if (status === 200) {
+              try {
+                const data = typeof text === 'string' ? JSON.parse(text) : text;
+                if (data && data.success === true) {
+                  // Update local account name if successful and provided in payload
+                  if (payloadObj.hasOwnProperty('name')) {
+                    acc.name = payloadObj.name;
+                    writeJson(ACCOUNTS_FILE, accounts);
+                  }
+                }
+              } catch (e) {
+                debugLog('ERROR', `Failed to parse update profile response: ${e.message}`);
+              }
+            }
+
+            res.writeHead(status || 502, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(text);
+            return;
+          }
+        } catch (e) {
+          debugLog('ERROR', `Update Profile POST proxy failed (got-scraping): ${e.message}`);
+          // Fallback to https.request if gotScraping fails, or handle the error
+        }
+
+        const globalSettings = readJson(SETTINGS_FILE, {});
+        const enableAntiDetection = globalSettings.enableAntiDetection || false;
+        let currentAccountUserAgent = 'Mozilla/5.0'; // Default
+        if (enableAntiDetection) {
+          if (acc && acc.userAgent) {
+            currentAccountUserAgent = acc.userAgent;
+            if (typeof currentAccountUserAgent !== 'string' || !currentAccountUserAgent) {
+              debugLog('WARNING', `Invalid User-Agent found for Update Profile POST for account ${acc.id}. Using default.`);
+              currentAccountUserAgent = 'Mozilla/5.0'; // Fallback to default
+            }
+          } else {
+            debugLog('INFO', `Anti-detection enabled but no custom User-Agent for Update Profile POST for account ${acc ? acc.id : 'unknown'}. Using default.`);
+          }
+        }
+        
+        const updateProfileProxy = useProxy ? getRandomProxy() : null;
+        if (useProxy) { // Only log if proxy is actually used
+          debugLog('INFO', `Update Profile POST using proxy: ${updateProfileProxy || 'Direct'}`);
+        }
+        const options = {
+          hostname: 'backend.wplace.live',
+          port: 443,
+          path: remotePath,
+          method: 'POST',
+          agent: updateProfileProxy ? new HttpsProxyAgent(updateProfileProxy) : HTTPS_AGENT,
+          headers: {
+            'User-Agent': currentAccountUserAgent, // Use userAgent passed in or from the account
+            'Accept': 'application/json, text/plain, */*',
+            'Origin': 'https://wplace.live',
+            'Referer': 'https://wplace.live/',
+            'Content-Type': 'application/json',
+            'Cookie': `j=${jToken}; cf_clearance=${cf}`
+          }
+        };
+        debugLog('OUTBOUND', 'proxy update profile POST begin', { path: remotePath, headers: { ...options.headers, Cookie: maskCookieHeader(options.headers.Cookie) }, body: payload });
+        const upstreamReq = https.request(options, (up) => {
+          const chunks = [];
+          up.on('data', (d) => chunks.push(d));
+          up.on('end', () => {
+            const encoding = ((up.headers && (up.headers['content-encoding'] || up.headers['Content-Encoding'])) || '').toLowerCase();
+            let buf = Buffer.concat(chunks);
+            if (encoding.includes('gzip')) { try { buf = zlib.gunzipSync(buf); } catch {} }
+            else if (encoding.includes('deflate')) { try { buf = zlib.inflateRawSync(buf); } catch { try { buf = zlib.inflateSync(buf); } catch {} } }
+            const text = buf.toString('utf8');
+            const statusCode = up.statusCode || 0;
+            debugLog('OUTBOUND_RESPONSE', 'proxy update profile POST end', { status: statusCode, bodyPreview: text.slice(0, 300) });
+
+            if (statusCode === 200) {
+              try {
+                const data = typeof text === 'string' ? JSON.parse(text) : text;
+                if (data && data.success === true) {
+                  // Update local account name if successful and provided in payload
+                  if (payloadObj.hasOwnProperty('name')) {
+                    acc.name = payloadObj.name;
+                    writeJson(ACCOUNTS_FILE, accounts);
+                  }
+                }
+              } catch (e) {
+                debugLog('ERROR', `Failed to parse update profile response (https.request): ${e.message}`);
+              }
+            }
+            
+            res.writeHead(statusCode || 502, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(text);
+          });
+        });
+        upstreamReq.on('error', (e) => {
+          debugLog('ERROR', `Update Profile POST upstream error: ${e.message}`);
+          res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'upstream error', message: e && e.message ? e.message : String(e) }));
+        });
+        upstreamReq.write(payload);
+        upstreamReq.end();
+
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'proxy failed' }));
+      }
+      return;
+    }
+
     if (parsed.pathname === '/api/accounts' && req.method === 'GET') {
       const accounts = readJson(ACCOUNTS_FILE, []);
       try {
@@ -1595,6 +1772,13 @@ function startServer(port, host) {
             account.pixelCount = Number(me.charges.count);
             account.pixelMax = Number(me.charges.max);
             account.active = true;
+            account.allianceId = me.allianceId;
+            account.allianceRole = me.allianceRole;
+            account.banned = me.banned;
+            account.country = me.country;
+            account.discord = me.discord;
+            account.equippedFlag = me.equippedFlag;
+            account.level = me.level;
           }
           if (me && Object.prototype.hasOwnProperty.call(me, 'droplets')) {
             const d = Number(me.droplets);
@@ -1669,6 +1853,13 @@ function startServer(port, host) {
           const b = Number(me.extraColorsBitmap);
           acct.extraColorsBitmap = Number.isFinite(b) ? Math.floor(b) : null;
         }
+        if (me && me.name) {
+          acct.accountname = me.name; // save name from /me response
+        }
+        const fieldsToUpdate = ['allianceId', 'allianceRole', 'banned', 'country', 'discord', 'equippedFlag', 'level'];
+        for (const field of fieldsToUpdate) {
+          if (me && Object.prototype.hasOwnProperty.call(me, field)) acct[field] = me[field];
+        }
         if (acct.autobuy === 'max' || acct.autobuy === 'rec') {
           const price = 500;
           const productId = acct.autobuy === 'max' ? 70 : 80;
@@ -1683,6 +1874,12 @@ function startServer(port, host) {
                   if (me2 && me2.charges) {
                     acct.pixelCount = Math.floor(Number(me2.charges.count));
                     acct.pixelMax = Math.floor(Number(me2.charges.max));
+                    acct.allianceId = me2.allianceId;
+                    acct.allianceRole = me2.allianceRole;
+                    acct.banned = me2.banned;
+                    acct.country = me2.country;
+                    acct.discord = me2.discord;
+                    acct.level = me2.level;
                     acct.active = true;
                   } else {
                     acct.active = false;
@@ -1694,6 +1891,13 @@ function startServer(port, host) {
                   if (me2 && Object.prototype.hasOwnProperty.call(me2, 'extraColorsBitmap')) {
                     const b2 = Number(me2.extraColorsBitmap);
                     acct.extraColorsBitmap = Number.isFinite(b2) ? Math.floor(b2) : null;
+                  }
+                  if (me2 && me2.name) {
+                    acct.accountname = me2.name; // save name from /me response
+                  }
+                  const fieldsToUpdateMe2 = ['allianceId', 'allianceRole', 'banned', 'country', 'discord', 'equippedFlag', 'level'];
+                  for (const field of fieldsToUpdateMe2) {
+                    if (me2 && Object.prototype.hasOwnProperty.call(me2, field)) acct[field] = me2[field];
                   }
                 } catch {}
               }
@@ -1847,6 +2051,12 @@ async function startAccountRefreshScheduler() {
           if (me && me.charges) {
             account.pixelCount = Math.floor(Number(me.charges.count));
             account.pixelMax = Math.floor(Number(me.charges.max));
+            account.allianceId = me.allianceId;
+            account.allianceRole = me.allianceRole;
+            account.banned = me.banned;
+            account.country = me.country;
+            account.discord = me.discord;
+            account.level = me.level;
             account.active = true; // Keep active if refresh successful
           } else {
             account.active = false; // Deactivate if refresh fails
@@ -1858,6 +2068,13 @@ async function startAccountRefreshScheduler() {
           if (me && Object.prototype.hasOwnProperty.call(me, 'extraColorsBitmap')) {
             const b = Number(me.extraColorsBitmap);
             account.extraColorsBitmap = Number.isFinite(b) ? Math.floor(b) : null;
+          }
+          if (me && me.name) {
+            account.accountname = me.name; // save name from /me response
+          }
+          const fieldsToUpdate = ['allianceId', 'allianceRole', 'banned', 'country', 'discord', 'equippedFlag', 'level'];
+          for (const field of fieldsToUpdate) {
+            if (me && Object.prototype.hasOwnProperty.call(me, field)) account[field] = me[field];
           }
           account.lastRefresh = now; // Update last refresh time
           updatedAccounts = true;
