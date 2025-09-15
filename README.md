@@ -7,7 +7,7 @@
       <a href="docs/RU.md"><img src="https://flagcdn.com/256x192/ru.png" width="48" alt="Russia Flag"></a>
       <a href="docs/JA.md"><img src="https://flagcdn.com/256x192/jp.png" width="48" alt="Japan Flag"></a>
       <a href="docs/CN.md"><img src="https://flagcdn.com/256x192/cn.png" width="48" alt="China Flag"></a>
-      <a href="docs/CN.md"><img src="https://flagcdn.com/256x192/vn.png" width="48" alt="China Flag"></a>
+      <a href="docs/VI.md"><img src="https://flagcdn.com/256x192/vn.png" width="48" alt="Vietnam Flag"></a>
   </p>
   <br>
   <br>
@@ -41,9 +41,21 @@
   <p align="center">
   The bot is easy to set up but hard to master. All kidding aside, it might seem difficult to use at first, but after the latest measures, there's no other bot that works like this, so it will be worth your effort.
   </p>
+---
 
-  <br>
-
+  ### Which features have been added in this fork version?
+  
+  - Proxy support
+  - Overlays
+   - Auto-select feature with more options
+      - [x] Priority colors
+      - [x] Broken colors
+      - [x] Chess pattern paint
+      - [x] Limit to overlay area
+  - Quick Account Addition via Extension
+  - Change Update Interval (minutes)
+  - Total droplets
+  - Add Vietnamese language
   ### 🔧┃Installation (EN)
 
   - Requirements:
@@ -229,6 +241,7 @@
   </p>
 
   ---
+
 
 
 
