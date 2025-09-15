@@ -2,7 +2,7 @@ console.log("[WPlace-Helper] background.js loaded.");
 const BACKEND_URLS = ['http://localhost:3000', 'http://127.0.0.1:3000'];
 const ALARM_NAME = 'tokenRetryAlarm';
 const CF_CLEARANCE_ALARM_NAME = 'cfClearanceRetryAlarm'; // Alarm for cf_clearance queue
-const RETRY_INTERVAL_MINUTES = 0.05; // Retry after 3 seconds (0.05 minutes) for token queue
+const RETRY_INTERVAL_MINUTES = 0.01; // Retry after 0.6 seconds (0.01 minutes) for token queue
 const CF_RETRY_INTERVAL_MINUTES = 0.5; // Retry cf_clearance every 30 seconds
 
 async function sendTokenToBackend(tokenData) {
@@ -116,7 +116,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const currentCfClearance = result.wplace_cf_clearance; // Get current cfClearance from storage
 
       // Only update storage and queue if the new token/cfClearance is different or coordinates changetokenData
-      if (currentToken !== tokenData.token || currentxpaw !== tokenData.xpaw || currentfp !== tokenData.fp || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(token.worldY) || currentCfClearance !== tokenData.cfClearance ) {
+      if (currentToken !== tokenData.token || currentxpaw !== tokenData.xpaw || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(token.worldY) || currentCfClearance !== tokenData.cfClearance ) {
         const toStore = {};
         if (tokenData.token) toStore.wplace_token = tokenData.token;
         if (tokenData.xpaw) toStore.wplace_xpaw_token = msg.xpaw;
@@ -131,10 +131,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         // Add tokenData to queue
         let tokenQueue = result.tokenQueue || [];
         tokenQueue.push(tokenData);
-        chrome.storage.local.set({ tokenQueue }, () => {
-          console.log("[WPlace-Helper] Token added to queue. Scheduling retry alarm.");
-          scheduleTokenRetryAlarm(); // Ensure alarm is scheduled
-        });
+        const sent = await sendTokenToBackend(tokenData);
+        if (sent) {
+          console.log("[WPlace-Helper] Token sent immediately.");
+        } else {
+          let tokenQueue = result.tokenQueue || [];
+          tokenQueue.push(tokenData);
+          chrome.storage.local.set({ tokenQueue }, () => {
+            console.log("[WPlace-Helper] Token added to queue due to immediate send failure. Scheduling retry alarm.");
+            scheduleTokenRetryAlarm(); // Ensure alarm is scheduled
+          });
+        }
       } else {
         console.log("[WPlace-Helper] Received same token/cfClearance, not updating storage or queue.");
         sendResponse({ ok: true });
