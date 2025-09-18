@@ -699,7 +699,7 @@ async function fetchMePuppeteer(cf_clearance, token, userAgent = 'Mozilla/5.0', 
     if (token) cookies.push({ name: 'j', value: String(token), domain: 'backend.wplace.live', path: '/', httpOnly: false, secure: true });
     if (cookies.length) await page.setCookie(...cookies);
     debugLog('OUTBOUND', 'puppeteer GET /me with cookies set');
-    const res = await page.goto('https://backend.wplace.live/me', { waitUntil: 'networkidle2', timeout: 20000 });
+    const res = await page.goto('https://backend.wplace.live/me', { waitUntil: 'domcontentloaded', timeout: 20000 });
     if (!res || res.status() !== 200) return null;
     const text = await page.evaluate(() => document.body && document.body.innerText || '');
     try { return JSON.parse(text); } catch { return null; }
