@@ -147,17 +147,17 @@
       height: 10px;
       image-rendering: pixelated;
       pointer-events: none;
-      z-index: 1300;
+      z-index: 898; /* Changed to be below sidebar (900) */
     }
     .pixel-marker[hidden] { display: none; }
-    #selection-overlay { position: fixed; left: 0; top: 0; z-index: 700; pointer-events: none; image-rendering: pixelated; }
+    #selection-overlay { position: fixed; left: 0; top: 0; z-index: 897; pointer-events: none; image-rendering: pixelated; } /* Changed to be below sidebar (900) */
     body.dragging-sign #sign { cursor: grabbing; }
     /* CSS for range-overlay */
    #range-overlay {
        position: absolute;
        border: 2px dashed #22d3ee; /* Neon blue */
        background: rgba(34, 211, 238, 0.2); /* Transparent background with blue */
-       z-index: 1000;
+       z-index: 899; /* Changed to be below sidebar (900) */
        pointer-events: none;
    }
    #range-overlay.saved-overlay {
@@ -685,22 +685,22 @@
       text-align: center;
     }
     #ready-popup .controls-row { justify-content: center; gap: 10px; }
-    /* #ready-token-input { width: 320px; } - Di chuyển style inline */
+    #ready-token-input { width: 320px; }
     #select-mode-controls { justify-content: center; }
-    .select-mode-wrap { display: inline-flex; align-items: center; gap: 8px; justify-content: center; flex: 1; }
+    .select-mode-wrap { display: inline-flex; align-items: center; gap: 8px; }
     .select-mode-label { font-size: 12px; color: #e5e7eb; opacity: 0.8; cursor: pointer; user-select: none; }
     .select-mode-label.active { color: #22d3ee; opacity: 1; }
-    .select-mode-track { position: relative; width: 44px; height: 24px; border-radius: 9999px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); cursor: pointer; padding: 0; }
-    .select-mode-knob { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 9999px; background: #e5e7eb; transition: transform 0.18s ease; }
+    .select-mode-track { position: relative; width: 48px; height: 27px; border-radius: 9999px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); cursor: pointer; padding: 0; }
+    .select-mode-knob { position: absolute; top: 1px; left: 2px; width: 23px; height: 23px; border-radius: 9999px; background: #e5e7eb; transition: transform 0.18s ease; }
     .select-mode-track.on { background: rgba(34,211,238,0.35); border-color: rgba(34,211,238,0.45); }
     .select-mode-track.on .select-mode-knob { transform: translateX(20px); }
     .shop-auto-wrap { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 6px; }
     /* Auto mode controls reuse select-mode styles */
     #auto-mode-controls { justify-content: center; }
-    .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .toggle { position: relative; display: inline-block; width: 48px; height: 27px; }
     .toggle input { opacity: 0; width: 0; height: 0; }
     .toggle .slider { position: absolute; inset: 0; border-radius: 9999px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); cursor: pointer; transition: background-color 0.15s ease, border-color 0.15s ease; }
-    .toggle .slider::before { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 9999px; background: #e5e7eb; transition: transform 0.18s ease; }
+    .toggle .slider::before { content: ''; position: absolute; top: 1px; left: 2px; width: 23px; height: 23px; border-radius: 9999px; background: #e5e7eb; transition: transform 0.18s ease; }
     .toggle input:checked + .slider { background: rgba(34,211,238,0.35); border-color: rgba(34,211,238,0.45); }
     .toggle input:checked + .slider::before { transform: translateX(20px); }
     
@@ -903,7 +903,7 @@
   <div id="pixel-selected-list" hidden></div>
   <div id="range-overlay" hidden></div>
   <div id="top-toolbar">
-    <div id="total-droplets-info" class="app-btn modal-right-info" style="position:static; margin-right:auto; margin-left: 0; pointer-events: none;" data-i18n-dynamic="droplets.totalLabel" data-count="0">💧 Tổng Droplets: -</div>
+    <div id="total-droplets-info" class="app-btn modal-right-info" style="position:static; margin-right:auto; margin-left: 0; pointer-events: none;" data-i18n-dynamic="droplets.totalLabel" data-count="0">💧 Total Droplets: -</div>
   <div id="sound-control">
     <button id="sound-toggle" class="app-btn" type="button" title="" aria-label="">🔊</button>
     <div class="sound-slider" role="group" aria-label="Ses ayarı">
@@ -919,7 +919,7 @@
   </div>
     <div id="control-panel">
       <div class="controls-row">
-        <button id="btn-accounts" class="app-btn" type="button" data-i18n="nav.accounts">Hesaplar</button>
+        <button id="btn-accounts" class="app-btn" type="button" data-i18n="nav.accounts">Accounts</button>
         <div id="pixel-power" role="status" aria-live="polite" data-i18n-dynamic="pixel.powerLabel" data-count="0" data-max="0">Piksel gücü: 0 / 0</div>
       </div>
       <div>
@@ -1300,7 +1300,7 @@
   <script>
     
     const I18N_DEFAULT_LANG = 'en';
-    const debugEnabled = true;
+    const debugEnabled = false;
     if (!debugEnabled) {
       console.log = function() {};
       console.info = function() {};
@@ -1762,7 +1762,7 @@ function calculateTotalDroplets() {
     const selectionOverlay = document.getElementById('selection-overlay');
     const selectionCtx = selectionOverlay ? selectionOverlay.getContext('2d', { willReadFrequently: true }) : null;
     const eraserButton = document.getElementById('eraser-button');
-    let isEraserMode; // Sẽ được tính toán động dựa trên selectedOverrideColorId
+    let isEraserMode; // Will be dynamically calculated based on selectedOverrideColorId
     function resizeSelectionOverlay(){
       try {
         if (!selectionOverlay) return;
@@ -1814,9 +1814,8 @@ function calculateTotalDroplets() {
           return;
         }
         
-        // Chỉ reload nếu có thay đổi trong cache hoặc nếu đây là refresh định kỳ
-        console.log(`[DEBUG] scheduleBackgroundRefresh: Attempting to reload background. Cache size: ${recentPaintCache.size}`);
-        const ok = await reloadCurrentBackground();
+        console.log(`[DEBUG] scheduleBackgroundRefresh: Attempting to reload background.`);
+        const ok = await reloadCurrentBackground(); // Luôn cố gắng tải lại nền
         if (ok){
           recentPaintCache.clear(); // Clear cache ONLY after successful background reload
           drawSelectionOverlay();
@@ -2209,7 +2208,7 @@ function calculateTotalDroplets() {
     updateMovementButtonEnabled();
 
     // Pixel fullness notifier
-    const FULLNESS_NOTIFY_PERIOD_MS = 300 * 1000; // 5 phút (trước đây 30 giây)
+    const FULLNESS_NOTIFY_PERIOD_MS = 300 * 1000; // 5 minutes (was 30 seconds)
     let lastFullnessNotifyAt = 0;
     function maybeNotifyFullnessNow(){
       const now = Date.now();
@@ -2249,7 +2248,9 @@ async function checkFullnessNotify() {
                     timeToRechargeMs = acc.pixelMax * 30 * 1000; // pixelMax * 30 seconds/pixel * 1000ms/second
                     // If estimatedFullRechargeTime is not set, or pixelCount has changed significantly
                     // and we are not waiting for a refresh, recalculate and set it.
-                    if (!acc.estimatedFullRechargeTime || (acc.lastPixelCount !== acc.pixelCount && acc.pixelCount > 0)) {
+                    // Always re-estimate if pixelCount is 0, or if pixelCount has changed for > 0 values.
+                    // This ensures repeated refresh attempts when stuck at 0 pixels.
+                    if (!acc.estimatedFullRechargeTime || (acc.pixelCount === 0) || (acc.lastPixelCount !== acc.pixelCount)) {
                         acc.estimatedFullRechargeTime = currentTime + timeToRechargeMs;
                         console.log(`[DEBUG] Setting/Updating estimatedFullRechargeTime for ${acc.name}: ${new Date(acc.estimatedFullRechargeTime).toISOString()} (Pixels needed: ${acc.pixelMax - acc.pixelCount})`); // Debug: Initial/Update estimate
                     } else {
@@ -2377,8 +2378,8 @@ async function checkFullnessNotify() {
    const minizineToDetectInput = document.getElementById('minizine-to-detect-input');
 
    // Auto Paint state variables
-   // Các khai báo biến Auto Paint đã được di chuyển lên trên (dòng 7320)
-   // Vị trí này chỉ cần giữ lại các 'const' DOM element
+   // Auto Paint variable declarations have been moved above (line 7320)
+   // This position only needs to retain 'const' DOM elements
 
      let readyHoverPixel = { x: null, y: null };
     
@@ -4369,6 +4370,7 @@ async function checkFullnessNotify() {
 
 async function reloadCurrentBackground() {
   // if (recentPaintCache.size > 0) return false; // Dòng này bị loại bỏ
+  recentPaintCache.clear(); // Clear cache at the beginning of reload
   try {
     const saved = JSON.parse(localStorage.getItem('lastFetch') || 'null');
     if (saved) {
@@ -6517,7 +6519,9 @@ function loadImage(area, no, preserveView = false) {
                     ...acc,
                     // If the account is full, ensure estimatedFullRechargeTime is reset.
                     // Otherwise, keep the value from existingAcc or from the new acc if not already present.
-                    estimatedFullRechargeTime: (acc.pixelCount === acc.pixelMax) ? null : (existingAcc ? existingAcc.estimatedFullRechargeTime : acc.estimatedFullRechargeTime || null),
+                    // If the account becomes full, set estimatedFullRechargeTime to null.
+                    // Otherwise, if pixelCount changed or it's a new account, re-estimate or keep previous.
+                    estimatedFullRechargeTime: (acc.pixelCount === acc.pixelMax) ? null : (acc.pixelCount !== (existingAcc ? existingAcc.pixelCount : -1) ? (Date.now() + (acc.pixelMax - acc.pixelCount) * 30 * 1000) : (existingAcc ? existingAcc.estimatedFullRechargeTime : null)),
                     lastPixelCount: acc.pixelCount, // Store current pixelCount as lastPixelCount for change detection
                     isRefreshing: existingAcc ? existingAcc.isRefreshing : false // Add isRefreshing flag
                 };
@@ -7170,7 +7174,7 @@ async function refreshAccountById(accountId){
             const coordsSpan = document.createElement('span');
             coordsSpan.style.fontSize = '10px';
             coordsSpan.style.opacity = '0.7';
-            coordsSpan.textContent = `(${overlay.rect.x}, ${overlay.rect.y}) - ${overlay.rect.w}x${overlay.rect.h}`;
+            coordsSpan.textContent = `${overlay.rect.w}x${overlay.rect.h}`; // Modified to only show width and height
             item.appendChild(coordsSpan);
 
             const actions = document.createElement('div');
@@ -7203,7 +7207,7 @@ async function refreshAccountById(accountId){
             actions.appendChild(selectBtn);
 
             const saveBtn = document.createElement('button');
-            saveBtn.textContent = overlay.isSaved ? t('buttons.unsave') : t('buttons.save');
+            saveBtn.setAttribute('data-i18n', overlay.isSaved ? 'buttons.unsave' : 'buttons.save');
             saveBtn.title = overlay.isSaved ? 'Unsave overlay' : 'Save overlay';
             saveBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -7212,6 +7216,8 @@ async function refreshAccountById(accountId){
                 renderOverlayList(); // Re-render to update button text
                 updateRangeOverlayPosition(); // Update style
             };
+            // Call applyTranslations directly for this button's text, or let renderOverlayList re-apply globally
+            saveBtn.textContent = t(overlay.isSaved ? 'buttons.unsave' : 'buttons.save');
             actions.appendChild(saveBtn);
 
             const deleteBtn = document.createElement('button');
@@ -7376,7 +7382,7 @@ async function refreshAccountById(accountId){
         const savedIndex = localStorage.getItem('selectedOverlayIndex');
         if (saved) {
           const loadedOverlays = JSON.parse(saved);
-          savedOverlays = loadedOverlays.map(ov => {
+          savedOverlays = loadedOverlays.filter(ov => ov.isSaved).map(ov => {
               // Ensure isSaved property exists for old saved overlays
               if (typeof ov.isSaved === 'undefined') {
                   ov.isSaved = false;
@@ -7389,9 +7395,17 @@ async function refreshAccountById(accountId){
               }
               return ov;
           });
-        }
-        if (savedIndex != null) {
-          selectedOverlayIndex = parseInt(savedIndex, 10);
+          // After filtering, adjust selectedOverlayIndex if the selected overlay was removed
+          if (savedIndex != null) {
+            const originalSelectedId = loadedOverlays[savedIndex] ? loadedOverlays[savedIndex].id : null;
+            const newIndex = savedOverlays.findIndex(ov => ov.id === originalSelectedId);
+            selectedOverlayIndex = newIndex;
+          } else {
+            selectedOverlayIndex = -1; // No selected overlay if no savedIndex or it was a non-saved one
+          }
+        } else {
+            savedOverlays = []; // If no saved data, ensure it's an empty array
+            selectedOverlayIndex = -1;
         }
         renderOverlayList();
         updateRangeOverlayPosition();
@@ -7442,13 +7456,8 @@ async function refreshAccountById(accountId){
               try { updateStartEnabled(); } catch {}
               showToast(t('messages.tokenPastedFromExtension'), 'success', 1200);
               // Auto start on token if enabled AND the token is actually new
-              if (autoStart) { // Added condition oldTokenValue !== token
-                  await new Promise(r => setTimeout(r, 50));
-                  startBtn.click();
-                  // No need to clear here, it will be cleared after successful paint
-              }
-            } //else {
-//              try { localStorage.setItem('last.captured.token', token); } catch {}            }
+              checkAndAutoStartPaint(); // Call checkAndAutoStartPaint
+            }
           } catch {}
         });
       } catch {}
@@ -7744,7 +7753,9 @@ const autoStartTrack = document.getElementById('auto-start-toggle');
         const isSelected = readySelectedAccountIds.indexOf(row.id) !== -1;
         btn.textContent = (isSelected ? '✓ ' : '') + (row.name || t('ready.accountLabelDefault')) + ' — ' + String(count) + ' / ' + String(max);
         btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+        btn.disabled = isPainting; // Disable account selection buttons while painting
         btn.addEventListener('click', () => {
+          if (isPainting) return; // Prevent action if painting is in progress
           const isSelectedNow = readySelectedAccountIds.indexOf(row.id) !== -1;
           if (isSelectedNow) {
             readySelectedAccountIds = [];
@@ -7922,7 +7933,11 @@ function pickNextBestAccountId(excludeIds = []){
     if (readyBtn && readyPopup) {
       readyBtn.addEventListener('click', async () => {
         try {
-          await loadAccounts();
+          // Only load accounts if not already loaded, to prevent delay on subsequent clicks
+          if (!window._accountsDataLoadedOnce) {
+            await loadAccounts();
+            window._accountsDataLoadedOnce = true;
+          }
           
           // Clear any leftover drag/ready state before toggling the popup
           try { readyMouseDownPt = null; } catch {}
@@ -8537,7 +8552,7 @@ function getSelectedAccountsSortedByCapacityDesc() {
         const hasToken = !!(readyTokenInput && readyTokenInput.value && readyTokenInput.value.trim().length > 0);
         const hasAccounts = getSelectedAccountsSortedByCapacityDesc().length > 0;
         const hasAnyPixel = readyGlobalMode ? (readyGlobalSelected.size > 0) : (getReadySelectedCount() > 0);
-        startBtn.disabled = !(hasToken && hasAccounts && hasAnyPixel);
+        startBtn.disabled = !(hasToken && hasAccounts && hasAnyPixel) || isPainting; // Disable if painting is in progress
       } catch {}
     }
     function updateEraserButtonUi() {
@@ -8684,8 +8699,15 @@ if (startBtn) {
             }
             offset += take;
             usedIds.push(acc.id);
-            try { await refreshAccountById(acc.id); } catch {}
-            updateReadyPixelForSelectedAccounts();
+            // Directly update the UI after a successful postBatch and before full refreshAccountById
+            // This gives immediate visual feedback. The full loadAccounts will follow.
+            acc.pixelCount = Math.max(0, (acc.pixelCount || 0) - take); // Simulate pixel count reduction
+            if (acc.pixelCount < acc.pixelMax && acc.estimatedFullRechargeTime === null) {
+              acc.estimatedFullRechargeTime = Date.now() + (acc.pixelMax - acc.pixelCount) * 30 * 1000;
+            }
+            updateTotalDropletsDisplay(); // Update total droplets on the main panel
+            updateReadyPixelForSelectedAccounts(); // Update ready pixel info
+            try { await refreshAccountById(acc.id); } catch {} // Full refresh from backend
           }
           if (offset > 0) paintedAny = true;
           if (offset < total && !hadRequestError) missingTotal += (total - offset);
@@ -9157,10 +9179,6 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
    loadBrokenPixelColors(); // Call load on startup for broken pixels
    renderBrokenPixelColors(); // Call render on startup for broken pixels
  
-   // TEMPORARY: Overwrite brokenPixelPriorityColors and priorityColors for debugging
-   renderBrokenPixelColors(); // Re-render after overwrite
-   renderPriorityColors(); // Re-render after overwrite
- 
    try {
      // Restore last view position
     try {
@@ -9191,7 +9209,8 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
     try { restoreImagesFromStorage(); } catch {}
   } catch {}
     updateCounter();
-    loadAccounts();
+    await loadAccounts(); // Load accounts on startup, make sure it's awaited.
+    window._accountsDataLoadedOnce = true; // Mark as loaded once.
 })();
     updateTotalDropletsDisplay(); // Ensure this is called here as well
     updatePixelPowerPosition(); // Gọi hàm này sau khi loadAccounts hoàn tất
@@ -9656,9 +9675,27 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
     }
 
 
+    // New function to check for auto-start condition
+    function checkAndAutoStartPaint() {
+      const hasToken = !!(readyTokenInput && readyTokenInput.value && readyTokenInput.value.trim().length > 0);
+      const hasXpaw = !!(readyXpawInput && readyXpawInput.value && readyXpawInput.value.trim().length > 0);
+      if (autoStart && hasToken && hasXpaw) {
+        startBtn.click();
+      }
+    }
+
     if (readyTokenInput) {
       readyTokenInput.addEventListener('input', () => {
         updateStartEnabled();
+        checkAndAutoStartPaint(); // Call the check function on input change
+      });
+    }
+
+    const readyXpawInput = document.getElementById('ready-xpaw-input'); // Ensure xpaw input is referenced
+    if (readyXpawInput) {
+      readyXpawInput.addEventListener('input', () => {
+        updateStartEnabled(); // Re-evaluate start button state
+        checkAndAutoStartPaint(); // Call the check function on xpaw input change
       });
     }
 
@@ -9768,8 +9805,8 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = '×';
         deleteBtn.style.position = 'absolute';
-        deleteBtn.style.top = '-8px';
-        deleteBtn.style.right = '-8px';
+        deleteBtn.style.top = '2px'; /* Đẩy xuống một chút để cân bằng */
+        deleteBtn.style.right = '2px'; /* Đẩy vào trong biên */
         deleteBtn.style.background = 'rgba(255,0,0,0.7)';
         deleteBtn.style.color = 'white';
         deleteBtn.style.border = 'none';
@@ -9863,7 +9900,10 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
         deleteBtn.style.borderRadius = '50%';
         deleteBtn.style.width = '16px';
         deleteBtn.style.height = '16px';
-        deleteBtn.style.fontSize = '10px';
+        deleteBtn.style.fontSize = '12px';
+        deleteBtn.style.display = 'flex';
+        deleteBtn.style.alignItems = 'center';
+        deleteBtn.style.justifyContent = 'center';
         deleteBtn.style.lineHeight = '1';
         deleteBtn.style.padding = '0';
         deleteBtn.style.cursor = 'pointer';
@@ -9921,6 +9961,7 @@ if (autoMode && assignedCount > 0 && !hadRequestError) {
   </script>
 </body>
 </html> 
+
 
 
 

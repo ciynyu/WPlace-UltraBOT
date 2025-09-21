@@ -109,7 +109,8 @@
     "checkPixels": "Check",
     "shop": "Shop",
     "delete": "Delete",
-    "selectOverlay": "Select Overlay"
+    "selectOverlay": "Select Overlay",
+    "unsave": "Unsave"
   },
   "thumb": {
     "imageAlt": "Image {n}",
