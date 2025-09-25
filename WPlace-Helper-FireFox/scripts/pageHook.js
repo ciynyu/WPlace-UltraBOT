@@ -184,81 +184,113 @@
 		});
 	} catch (e) {}
 
-        const originalFetch = window.fetch;
-        window.fetch = async function(input, init) {
-                const url = typeof input === 'string' ? input : (input && input.url);
-                if (isTarget(url)) {
-                        try {
-                                if (ENABLED) {
-                                        const body = init && init.body;
-                                        const text = await decodeBodyToText(body);
-                                        const { token } = extractBodyFields(text);
-                                        const headersSource = (init && init.headers) || (input && input.headers);
-                                        const xpaw = extractHeader(headersSource, 'x-pawtect-token');
-                                        const { x, y } = extractWorldXY(url);
-                                        if (token) postToken(token, x, y, xpaw);
-                                }
-                        } catch (e) {}
-                        // Block the pixel POST after capturing token to avoid sending from page directly
-                        if (ENABLED) {
-                                return new Response(null, { status: 204, statusText: 'No Content' });
-                        }
-                }
-                return originalFetch.apply(this, arguments);
-        };
+ const originalFetch = window.fetch;
+ window.fetch = new Proxy(originalFetch, {
+  async apply(target, _this, args) {
+   const [input, init] = args;
+   const url = typeof input === 'string' ? input : (input && input.url);
+   if (isTarget(url)) {
+    try {
+     if (ENABLED) {
+      const body = init && init.body;
+      const text = await decodeBodyToText(body);
+      const { token } = extractBodyFields(text);
+      const headersSource = (init && init.headers) || (input && input.headers);
+      const xpaw = extractHeader(headersSource, 'x-pawtect-token');
+      const { x, y } = extractWorldXY(url);
+      if (token) postToken(token, x, y, xpaw);
+     }
+    } catch (e) {}
+    // Block the pixel POST after capturing token to avoid sending from page directly
+    if (ENABLED) {
+     return new Response(null, { status: 204, statusText: 'No Content' });
+    }
+   }
+   return Reflect.apply(target, _this, args);
+  }
+ });
 
-        const originalOpen = XMLHttpRequest.prototype.open;
-        const originalSend = XMLHttpRequest.prototype.send;
-        const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
-        let lastUrl = null;
-        XMLHttpRequest.prototype.open = function(method, url) {
-                lastUrl = url;
-                this.__xpaw = null;
-                return originalOpen.apply(this, arguments);
-        };
-        XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
-                if (name && name.toLowerCase() === 'x-pawtect-token') {
-                        try { this.__xpaw = value; } catch (_) {}
-                }
-                return originalSetRequestHeader.apply(this, arguments);
-        };
-        XMLHttpRequest.prototype.send = function(body) {
-                if (isTarget(lastUrl)) {
-                        try {
-                                if (ENABLED) {
-                                        decodeBodyToText(body).then(text => {
-                                                const { token } = extractBodyFields(text);
-                                                const { x, y } = extractWorldXY(lastUrl);
-                                                const xpaw = this.__xpaw || null;
-                                                if (token) postToken(token, x, y, xpaw);
-                                                this.__xpaw = null;
-                                        });
-                                }
-                        } catch (e) {}
-                }
-                return originalSend.apply(this, arguments);
-        };
+ const originalXHR = XMLHttpRequest;
+ window.XMLHttpRequest = new Proxy(originalXHR, {
+  construct(target, args) {
+   const xhr = Reflect.construct(target, args);
+   let lastUrl = null;
 
-	const originalSendBeacon = navigator.sendBeacon ? navigator.sendBeacon.bind(navigator) : null;
-	if (originalSendBeacon) {
-		navigator.sendBeacon = function(url, data) {
-			if (isTarget(url)) {
-				try {
-                                if (ENABLED) {
-                                        decodeBodyToText(data).then(text => {
-                                                const { token } = extractBodyFields(text);
-                                                const { x, y } = extractWorldXY(url);
-                                                if (token) postToken(token, x, y, null);
-                                        });
-                                }
-				} catch (e) {}
-				if (ENABLED) {
-					return false;
-				}
-			}
-			return originalSendBeacon.apply(this, arguments);
-		};
-	}
+   xhr.open = new Proxy(xhr.open, {
+    apply(openTarget, openThis, openArgs) {
+     lastUrl = openArgs[1];
+     this.__xpaw = null;
+     return Reflect.apply(openTarget, openThis, openArgs);
+    }
+   });
+
+   xhr.setRequestHeader = new Proxy(xhr.setRequestHeader, {
+    apply(setHeaderTarget, setHeaderThis, setHdrArgs) {
+     const [name, value] = setHdrArgs;
+     if (name && name.toLowerCase() === 'x-pawtect-token') {
+      try { this.__xpaw = value; } catch (_) {}
+     }
+     return Reflect.apply(setHeaderTarget, setHeaderThis, setHdrArgs);
+    }
+   });
+
+   xhr.send = new Proxy(xhr.send, {
+    async apply(sendTarget, sendThis, sendArgs) {
+     if (isTarget(lastUrl)) {
+      try {
+       if (ENABLED) {
+        const body = sendArgs[0];
+        decodeBodyToText(body).then(text => {
+        	const { token } = extractBodyFields(text);
+        	const { x, y } = extractWorldXY(lastUrl);
+        	const xpaw = this.__xpaw || null;
+        	if (token) postToken(token, x, y, xpaw);
+        	this.__xpaw = null;
+        });
+       }
+      } catch (e) {}
+      Object.defineProperty(sendThis, 'readyState', { value: 4, configurable: true });
+      Object.defineProperty(sendThis, 'status', { value: 204, configurable: true });
+      Object.defineProperty(sendThis, 'responseText', { value: '', configurable: true });
+      Object.defineProperty(sendThis, 'response', { value: '', configurable: true });
+      if (typeof sendThis.onloadend === 'function') {
+       sendThis.onloadend();
+      }
+      if (typeof sendThis.onreadystatechange === 'function') {
+       sendThis.onreadystatechange();
+      }
+      return;
+     }
+     return Reflect.apply(sendTarget, sendThis, sendArgs);
+    }
+   });
+   return xhr;
+  }
+ });
+
+ const originalSendBeacon = navigator.sendBeacon ? navigator.sendBeacon.bind(navigator) : null;
+ if (originalSendBeacon) {
+  navigator.sendBeacon = new Proxy(originalSendBeacon, {
+   async apply(target, _this, args) {
+    const [url, data] = args;
+    if (isTarget(url)) {
+     try {
+      if (ENABLED) {
+       decodeBodyToText(data).then(text => {
+        const { token } = extractBodyFields(text);
+        const { x, y } = extractWorldXY(url);
+        if (token) postToken(token, x, y, null);
+       });
+      }
+     } catch (e) {}
+     if (ENABLED) {
+      return false;
+     }
+    }
+    return Reflect.apply(target, _this, args);
+   }
+  });
+ }
 })();
 
 
