@@ -9,7 +9,7 @@
                 try {
                         const fp = genFp();
                         window.postMessage({ __wplace: true, type: 'token_found', token, xpaw, fp, worldX, worldY }, '*');
-                } catch (e) {}
+                } catch (e) { console.error("[WPlace-Helper] pageHook.js - Error in postToken:", e); }
         }
 
         function genFp() {
@@ -125,7 +125,8 @@
 			const m = rest.match(/^(\d+)\/(\d+)/);
 			if (!m) return { x: null, y: null };
 			return { x: m[1], y: m[2] };
-		} catch (_) {
+		} catch (e) {
+			console.error("[WPlace-Helper] pageHook.js - Error extracting world coordinates:", e);
 			return { x: null, y: null };
 		}
 	}
@@ -137,7 +138,7 @@
 		if (body instanceof URLSearchParams) return Promise.resolve(body.toString());
 		try {
 			if (body && typeof body === 'object') return Promise.resolve(JSON.stringify(body));
-		} catch (e) {}
+		} catch (e) { console.error("[WPlace-Helper] pageHook.js - Error stringifying body:", e); }
 		return Promise.resolve('');
 	}
 
@@ -151,7 +152,7 @@
                         try {
                                 const params = new URLSearchParams(text);
                                 out.token = params.get('t');
-                        } catch (_) {}
+                        } catch (e) { console.error("[WPlace-Helper] pageHook.js - Error parsing URLSearchParams from body:", e); }
                 }
                 return out;
         }
@@ -172,7 +173,7 @@
                                         if (k && k.toLowerCase() === lowerName) return headers[k];
                                 }
                         }
-                } catch (_) {}
+                } catch (e) { console.error("[WPlace-Helper] pageHook.js - Error extracting header:", e); }
                 return null;
         }
 
@@ -185,93 +186,153 @@
 			            MOCK_PAINT_ENABLED = !!d.enabled;
 			        }
 		});
-	} catch (e) {}
+	} catch (e) { console.error("[WPlace-Helper] pageHook.js - Error in message listener:", e); }
 
-        const originalFetch = window.fetch;
-        window.fetch = async function(input, init) {
+			     const originalFetch = window.fetch;
+			     window.fetch = new Proxy(originalFetch, {
+            async apply(target, thisArg, argumentsList) {
+                const [input, init] = argumentsList;
                 const url = typeof input === 'string' ? input : (input && input.url);
+
                 if (isTarget(url)) {
-                        try {
-                                if (ENABLED) {
-                                        const body = init && init.body;
-                                        const text = await decodeBodyToText(body);
-                                        const { token } = extractBodyFields(text);
-                                        const headersSource = (init && init.headers) || (input && input.headers);
-                                        const xpaw = extractHeader(headersSource, 'x-pawtect-token');
-                                        const { x, y } = extractWorldXY(url);
-                                        if (token) {
-                                            postToken(token, x, y, xpaw);
-                                        }
-                                }
-                        } catch (e) {
-                            console.error("[WPlace-Helper] pageHook.js - Error during token capture:", e);
-                        }
-                        // Block the pixel POST after capturing token to avoid sending from page directly
+                    try {
                         if (ENABLED) {
-                                if (MOCK_PAINT_ENABLED) {
-                                    return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
-                                } else {
-                                    return new Response(null, { status: 204, statusText: 'No Content' });
-                                }
+                            const body = init && init.body;
+                            const text = await decodeBodyToText(body);
+                            const { token } = extractBodyFields(text);
+                            const headersSource = (init && init.headers) || (input && input.headers);
+                            const xpaw = extractHeader(headersSource, 'x-pawtect-token');
+                            const { x, y } = extractWorldXY(url);
+                            if (token) {
+                                postToken(token, x, y, xpaw);
+                            }
                         }
-                }
-                return originalFetch.apply(this, arguments);
-        };
+                    } catch (e) {
+                        console.error("[WPlace-Helper] pageHook.js - Error during token capture (fetch):", e);
+                    }
 
-        const originalOpen = XMLHttpRequest.prototype.open;
-        const originalSend = XMLHttpRequest.prototype.send;
-        const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
-        let lastUrl = null;
-        XMLHttpRequest.prototype.open = function(method, url) {
-                lastUrl = url;
-                this.__xpaw = null;
-                return originalOpen.apply(this, arguments);
-        };
-        XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
-                if (name && name.toLowerCase() === 'x-pawtect-token') {
-                        try { this.__xpaw = value; } catch (_) {}
+                    if (ENABLED) {
+                        if (MOCK_PAINT_ENABLED) {
+                            return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                        } else {
+                            return new Response(null, { status: 204, statusText: 'No Content' });
+                        }
+                    }
                 }
-                return originalSetRequestHeader.apply(this, arguments);
-        };
-        XMLHttpRequest.prototype.send = function(body) {
-                if (isTarget(lastUrl)) {
+                return Reflect.apply(target, thisArg, argumentsList);
+            }
+        });
+
+        const originalXHR = XMLHttpRequest;
+        window.XMLHttpRequest = new Proxy(originalXHR, {
+            construct(target, argumentsList) {
+                const xhr = Reflect.construct(target, argumentsList);
+                let currentUrl = null;
+                let xpawHeader = null;
+
+                xhr.open = new Proxy(xhr.open, {
+                    apply(openTarget, openThisArg, openArgumentsList) {
+                        currentUrl = openArgumentsList[1];
+                        xpawHeader = null; // Reset for new request
+                        return Reflect.apply(openTarget, openThisArg, openArgumentsList);
+                    }
+                });
+
+                xhr.setRequestHeader = new Proxy(xhr.setRequestHeader, {
+                    apply(setHeaderTarget, setHeaderThisArg, setHeaderArgumentsList) {
+                        const [name, value] = setHeaderArgumentsList;
+                        if (name && name.toLowerCase() === 'x-pawtect-token') {
+                            xpawHeader = value;
+                        }
+                        return Reflect.apply(setHeaderTarget, setHeaderThisArg, setHeaderArgumentsList);
+                    }
+                });
+
+                xhr.send = new Proxy(xhr.send, {
+                    async apply(sendTarget, sendThisArg, sendArgumentsList) {
+                        if (isTarget(currentUrl)) {
+                            try {
+                                if (ENABLED) {
+                                    const body = sendArgumentsList[0];
+                                    const text = await decodeBodyToText(body);
+                                    const { token } = extractBodyFields(text);
+                                    const { x, y } = extractWorldXY(currentUrl);
+                                    if (token) {
+                                        postToken(token, x, y, xpawHeader);
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("[WPlace-Helper] pageHook.js - Error during token capture (XMLHttpRequest):", e);
+                            }
+
+                            if (ENABLED) {
+                                if (MOCK_PAINT_ENABLED) {
+                                    // Mimic a successful response without actually sending
+                                    Object.defineProperty(sendThisArg, 'readyState', { value: 4, configurable: true });
+                                    Object.defineProperty(sendThisArg, 'status', { value: 200, configurable: true });
+                                    Object.defineProperty(sendThisArg, 'responseText', { value: JSON.stringify({}), configurable: true });
+                                    Object.defineProperty(sendThisArg, 'response', { value: JSON.stringify({}), configurable: true });
+                                    // Call onloadend and onreadystatechange events manually
+                                    if (typeof sendThisArg.onloadend === 'function') {
+                                        sendThisArg.onloadend();
+                                    }
+                                    if (typeof sendThisArg.onreadystatechange === 'function') {
+                                        sendThisArg.onreadystatechange();
+                                    }
+                                    return; // Prevent original send from being called
+                                } else {
+                                    // Allow original send to be called but return an error or no content
+                                    Object.defineProperty(sendThisArg, 'readyState', { value: 4, configurable: true });
+                                    Object.defineProperty(sendThisArg, 'status', { value: 204, configurable: true }); // No Content
+                                    Object.defineProperty(sendThisArg, 'responseText', { value: '', configurable: true });
+                                    Object.defineProperty(sendThisArg, 'response', { value: '', configurable: true });
+                                    if (typeof sendThisArg.onloadend === 'function') {
+                                        sendThisArg.onloadend();
+                                    }
+                                    if (typeof sendThisArg.onreadystatechange === 'function') {
+                                        sendThisArg.onreadystatechange();
+                                    }
+                                    return; // Prevent original send from being called
+                                }
+                            }
+                        }
+                        return Reflect.apply(sendTarget, sendThisArg, sendArgumentsList);
+                    }
+                });
+                return xhr;
+            }
+        });
+
+        const originalSendBeacon = navigator.sendBeacon ? navigator.sendBeacon.bind(navigator) : null;
+        if (originalSendBeacon) {
+            navigator.sendBeacon = new Proxy(originalSendBeacon, {
+                async apply(target, thisArg, argumentsList) {
+                    const [url, data] = argumentsList;
+                    if (isTarget(url)) {
                         try {
-                                if (ENABLED) {
-                                        decodeBodyToText(body).then(text => {
-                                                const { token } = extractBodyFields(text);
-                                                const { x, y } = extractWorldXY(lastUrl);
-                                                const xpaw = this.__xpaw || null;
-                                                if (token) postToken(token, x, y, xpaw);
-                                                this.__xpaw = null;
-                                        });
+                            if (ENABLED) {
+                                const text = await decodeBodyToText(data);
+                                const { token } = extractBodyFields(text);
+                                const { x, y } = extractWorldXY(url);
+                                if (token) {
+                                    postToken(token, x, y, null);
                                 }
-                        } catch (e) {}
-                }
-                return originalSend.apply(this, arguments);
-        };
+                            }
+                        } catch (e) {
+                            console.error("[WPlace-Helper] pageHook.js - Error during token capture (sendBeacon):", e);
+                        }
 
-	const originalSendBeacon = navigator.sendBeacon ? navigator.sendBeacon.bind(navigator) : null;
-	if (originalSendBeacon) {
-		navigator.sendBeacon = function(url, data) {
-			if (isTarget(url)) {
-				try {
-                                if (ENABLED) {
-                                        decodeBodyToText(data).then(text => {
-                                                const { token } = extractBodyFields(text);
-                                                const { x, y } = extractWorldXY(url);
-                                                if (token) postToken(token, x, y, null);
-                                        });
-                                }
-				} catch (e) {}
-				if (ENABLED) {
-				               if (MOCK_PAINT_ENABLED) {
-				                   return true; // sendBeacon returns true for success
-				               } else {
-				                   return false; // Block the actual beacon
-				               }
-				}
-			}
-			return originalSendBeacon.apply(this, arguments);
-		};
-	}
+                        if (ENABLED) {
+                            if (MOCK_PAINT_ENABLED) {
+                                return true; // sendBeacon returns true for success
+                            } else {
+                                return false; // Block the actual beacon
+                            }
+                        }
+                    }
+                    return Reflect.apply(target, thisArg, argumentsList);
+                }
+            });
+        }
 })();
+
