@@ -14,6 +14,10 @@ document.addEventListener('DOMContentLoaded', function() {
   const toggleWrap = document.getElementById('toggle-capture-wrap');
   const toggleLabel = document.getElementById('toggle-capture-label');
 
+  const toggleMockPaint = document.getElementById('toggle-mock-paint');
+  const toggleMockPaintWrap = document.getElementById('toggle-mock-paint-wrap');
+  const toggleMockPaintLabel = document.getElementById('toggle-mock-paint-label');
+ 
   // const toggleAntiDetection = document.getElementById('toggle-anti-detection');
   // const toggleAntiDetectionWrap = document.getElementById('toggle-anti-detection-wrap');
   // const toggleAntiDetectionLabel = document.getElementById('toggle-anti-detection-label');
@@ -35,7 +39,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
  
   // Merge chrome.storage.local.get calls into one
-  chrome.storage.local.get(['wplace_token', 'wplace_xpaw_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'wplace_enabled', 'enableAntiDetection', 'seasson_cf_clearance_enabled'], function(result) {
+  chrome.storage.local.get(['wplace_token', 'wplace_xpaw_token', 'wplace_world_x', 'wplace_world_y', 'wplace_cf_clearance', 'wplace_enabled', 'wplace_mock_paint_enabled', 'enableAntiDetection', 'seasson_cf_clearance_enabled'], function(result) {
     // Update Pixel Token and World X/Y
     if (tokenInput) {
       tokenInput.value = (result && result.wplace_token) ? result.wplace_token : 'No token captured yet...';
@@ -63,6 +67,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (toggleCapture) toggleCapture.checked = captureEnabled;
     if (toggleWrap) toggleWrap.setAttribute('data-checked', String(!!captureEnabled));
     if (toggleLabel) toggleLabel.textContent = captureEnabled ? 'On' : 'Off';
+
+    // Update "Mock Paint" status
+    let mockPaintEnabled = result && typeof result.wplace_mock_paint_enabled === 'boolean' ? result.wplace_mock_paint_enabled : false; // Default to false
+    if (toggleMockPaint) toggleMockPaint.checked = mockPaintEnabled;
+    if (toggleMockPaintWrap) toggleMockPaintWrap.setAttribute('data-checked', String(!!mockPaintEnabled));
+    if (toggleMockPaintLabel) toggleMockPaintLabel.textContent = mockPaintEnabled ? 'On' : 'Off';
  
     // Update Anti-Detection status (always off)
     const antiDetectionEnabled = false; // Always set to false to disable anti-detection feature
@@ -108,10 +118,30 @@ document.addEventListener('DOMContentLoaded', function() {
       if (toggleWrap) toggleWrap.setAttribute('data-checked', String(enabled));
       if (toggleLabel) toggleLabel.textContent = enabled ? 'On' : 'Off';
       chrome.storage.local.set({ wplace_enabled: enabled });
+      // Send message to content script to update pageHook.js
+      chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+        if (tabs[0] && tabs[0].id) {
+          chrome.tabs.sendMessage(tabs[0].id, { type: 'update_toggle_state', wplace_enabled: enabled });
+        }
+      });
     });
   }
-
-
+ 
+   if (toggleMockPaint) {
+     toggleMockPaint.addEventListener('change', function() {
+       const enabled = !!toggleMockPaint.checked;
+       if (toggleMockPaintWrap) toggleMockPaintWrap.setAttribute('data-checked', String(enabled));
+       if (toggleMockPaintLabel) toggleMockPaintLabel.textContent = enabled ? 'On' : 'Off';
+       chrome.storage.local.set({ wplace_mock_paint_enabled: enabled });
+       // Send message to content script to update pageHook.js
+       chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+         if (tabs[0] && tabs[0].id) {
+           chrome.tabs.sendMessage(tabs[0].id, { type: 'update_toggle_state', wplace_mock_paint_enabled: enabled });
+         }
+       });
+     });
+   }
+ 
   // if (toggleAntiDetection) {
   //   toggleAntiDetection.addEventListener('change', function() {
   //     // Prevent user from enabling anti-detection feature
@@ -125,17 +155,17 @@ document.addEventListener('DOMContentLoaded', function() {
   //     chrome.storage.local.set({ enableAntiDetection: enabled }); */
   //   });
   // }
-
- if (toggleSeassonCfClearance) {
-   toggleSeassonCfClearance.addEventListener('change', function() {
-     // Prevent user from enabling this feature
-     toggleSeassonCfClearance.checked = false;
-     if (toggleSeassonCfClearanceWrap) toggleSeassonCfClearanceWrap.setAttribute('data-checked', String(false));
-     if (toggleSeassonCfClearanceLabel) toggleSeassonCfClearanceLabel.textContent = 'Off';
-     chrome.storage.local.set({ seasson_cf_clearance_enabled: false });
-   });
- }
-
+ 
+  if (toggleSeassonCfClearance) {
+    toggleSeassonCfClearance.addEventListener('change', function() {
+      // Prevent user from enabling this feature
+      toggleSeassonCfClearance.checked = false;
+      if (toggleSeassonCfClearanceWrap) toggleSeassonCfClearanceWrap.setAttribute('data-checked', String(false));
+      if (toggleSeassonCfClearanceLabel) toggleSeassonCfClearanceLabel.textContent = 'Off';
+      chrome.storage.local.set({ seasson_cf_clearance_enabled: false });
+    });
+  }
+ 
   if (copyButton) {
     copyButton.addEventListener('click', function() {
       if (!tokenInput) return;
@@ -161,7 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   function valOrDash(v) { return (v && String(v).trim()) ? String(v).trim() : '-'; }
-
+ 
   if (copyWorldX) {
     copyWorldX.addEventListener('click', function() {
       const xVal = worldXInput ? worldXInput.value : '';
@@ -173,7 +203,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-
+ 
   if (copyWorldY) {
     copyWorldY.addEventListener('click', function() {
       const yVal = worldYInput ? worldYInput.value : '';
@@ -185,7 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-
+ 
   function loadCookies() {
     if (!cookieJ) return;
     chrome.cookies.getAll({ domain: 'wplace.live', name: 'j' }, function(cookies) {
@@ -198,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   loadCookies();
-
+ 
   if (copyJ) {
     copyJ.addEventListener('click', function() {
       if (!cookieJ) return;
@@ -210,8 +240,8 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-
-
+ 
+ 
   if (pasteCfClearanceButton) {
     pasteCfClearanceButton.addEventListener('click', async function() {
       try {
@@ -225,12 +255,12 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-
+ 
   if (quickAddButton) {
     quickAddButton.addEventListener('click', async function() {
       let jToken = '';
       let cfClearance = '';
-
+ 
       // Automatically retrieve jToken from cookies
       const jCookie = await new Promise(resolve => {
         chrome.cookies.getAll({ domain: 'wplace.live', name: 'j' }, function(cks) {
@@ -250,7 +280,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!cfClearance && storedCfClearance && storedCfClearance.length >= 30) {
           cfClearance = storedCfClearance;
       }
-
+ 
       if (!jToken) {
         setStatus('J token not found. Login or enter manually.');
         return;
@@ -263,7 +293,7 @@ document.addEventListener('DOMContentLoaded', function() {
       try {
         const accounts = await fetch('http://localhost:3000/api/accounts').then(res => res.json());
         let existingAccount = null;
-
+ 
         // Check if account with same jToken exists
         if (jToken) {
           existingAccount = accounts.find(acc => acc.token === jToken);
@@ -283,7 +313,7 @@ document.addEventListener('DOMContentLoaded', function() {
           // The backend should manage cf_clearance uniqueness and updates for existing accounts.
           //existingAccount = accounts.find(acc => acc.cf_clearance === cfClearance);
         }
-
+ 
         let method = 'POST';
         let url = 'http://localhost:3000/api/accounts';
         let body = {
@@ -294,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Get name from quick-add-name-input, if available
         const accountNameInput = document.getElementById('quick-add-name-input');
         let accountName = accountNameInput ? accountNameInput.value.trim() : '';
-
+ 
         // Account name handling logic
         if (existingAccount) {
           method = 'PUT';
@@ -320,14 +350,14 @@ document.addEventListener('DOMContentLoaded', function() {
             body.name = jToken ? `j_${jToken.substring(0, 8)}` : `cf_${cfClearance.substring(0, 8)}`; // Default name
           }
         }
-
-
+ 
+ 
         const response = await fetch(url, {
           method: method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
-
+ 
         const data = await response.json();
         if (response.ok) {
           // If the account name was not provided manually and the backend returned a name, use it
@@ -345,7 +375,7 @@ document.addEventListener('DOMContentLoaded', function() {
           }
           // Clear cf_clearance input after successful save
           if (quickAddCfClearanceInput) {
-              quickAddCfClearanceInput.value = '';
+                            quickAddCfClearanceInput.value = '';
           }
           chrome.storage.local.remove('wplace_cf_clearance'); // Clear stored cf_clearance as it's saved
           // chrome.runtime.sendMessage({ type: 'refresh_main_app_accounts' });

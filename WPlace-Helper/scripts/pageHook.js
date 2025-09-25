@@ -1,8 +1,9 @@
 
 (function () {
-	let ENABLED = true; 
-	const targetOrigin = 'https://backend.wplace.live';
-	const targetPathPrefix = '/s0/pixel/';
+ 	let ENABLED = true;
+        let MOCK_PAINT_ENABLED = false; // New state for mock paint (default to off)
+ 	const targetOrigin = 'https://backend.wplace.live';
+ 	const targetPathPrefix = '/s0/pixel/';
 
         function postToken(token, worldX, worldY, xpaw) {
                 try {
@@ -180,7 +181,9 @@
 			const d = ev && ev.data;
 			if (d && d.__wplace && d.type === 'toggle') {
 				ENABLED = !!d.enabled;
-			}
+			} else if (d && d.__wplace && d.type === 'toggle_mock_paint') {
+			            MOCK_PAINT_ENABLED = !!d.enabled;
+			        }
 		});
 	} catch (e) {}
 
@@ -196,12 +199,20 @@
                                         const headersSource = (init && init.headers) || (input && input.headers);
                                         const xpaw = extractHeader(headersSource, 'x-pawtect-token');
                                         const { x, y } = extractWorldXY(url);
-                                        if (token) postToken(token, x, y, xpaw);
+                                        if (token) {
+                                            postToken(token, x, y, xpaw);
+                                        }
                                 }
-                        } catch (e) {}
+                        } catch (e) {
+                            console.error("[WPlace-Helper] pageHook.js - Error during token capture:", e);
+                        }
                         // Block the pixel POST after capturing token to avoid sending from page directly
                         if (ENABLED) {
-                                return new Response(null, { status: 204, statusText: 'No Content' });
+                                if (MOCK_PAINT_ENABLED) {
+                                    return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                                } else {
+                                    return new Response(null, { status: 204, statusText: 'No Content' });
+                                }
                         }
                 }
                 return originalFetch.apply(this, arguments);
@@ -253,7 +264,11 @@
                                 }
 				} catch (e) {}
 				if (ENABLED) {
-					return false;
+				               if (MOCK_PAINT_ENABLED) {
+				                   return true; // sendBeacon returns true for success
+				               } else {
+				                   return false; // Block the actual beacon
+				               }
 				}
 			}
 			return originalSendBeacon.apply(this, arguments);

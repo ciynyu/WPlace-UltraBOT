@@ -116,7 +116,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const currentCfClearance = result.wplace_cf_clearance; // Get current cfClearance from storage
 
       // Only update storage and queue if the new token/cfClearance is different or coordinates changetokenData
-      if (currentToken !== tokenData.token || currentxpaw !== tokenData.xpaw || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(token.worldY) || currentCfClearance !== tokenData.cfClearance ) {
+      if (currentToken !== tokenData.token || currentxpaw !== tokenData.xpaw || currentWorldX !== String(tokenData.worldX) || currentWorldY !== String(tokenData.worldY) || currentCfClearance !== tokenData.cfClearance ) {
         const toStore = {};
         if (tokenData.token) toStore.wplace_token = tokenData.token;
         if (tokenData.xpaw) toStore.wplace_xpaw_token = msg.xpaw;

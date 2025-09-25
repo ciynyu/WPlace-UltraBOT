@@ -1,4 +1,4 @@
-
+ 
 console.log("[WPlace-Helper] content.js loaded.");
 
 (function injectPageHook() {
@@ -8,6 +8,11 @@ console.log("[WPlace-Helper] content.js loaded.");
 		s.async = false;
 		(document.documentElement || document.head).appendChild(s);
 		s.parentNode && s.parentNode.removeChild(s);
+		// Send initial toggle states to pageHook.js immediately after injection
+		chrome.storage.local.get(['wplace_enabled', 'wplace_mock_paint_enabled'], function(result) {
+			window.postMessage({ __wplace: true, type: 'toggle', enabled: !!result.wplace_enabled }, '*');
+			window.postMessage({ __wplace: true, type: 'toggle_mock_paint', enabled: !!result.wplace_mock_paint_enabled }, '*');
+		});
 	} catch (e) {}
 })();
 
@@ -29,30 +34,55 @@ window.addEventListener('message', function(ev) {
 	}
 });
 
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'update_toggle_state') {
+        if (msg.hasOwnProperty('wplace_enabled')) {
+            try { window.postMessage({ __wplace: true, type: 'toggle', enabled: !!msg.wplace_enabled }, '*'); } catch (e) {}
+        }
+        if (msg.hasOwnProperty('wplace_mock_paint_enabled')) {
+            try { window.postMessage({ __wplace: true, type: 'toggle_mock_paint', enabled: !!msg.wplace_mock_paint_enabled }, '*'); } catch (e) {}
+        }
+    }
+});
+ 
 (function syncToggle() {
-	let wplaceEnabled = true;
-	function syncEnabledToPage() {
-		try { window.postMessage({ __wplace: true, type: 'toggle', enabled: !!wplaceEnabled }, '*'); } catch (e) {}
-	}
-	try {
-		chrome.storage.local.get(['wplace_enabled'], function(result) {
-			if (result && typeof result.wplace_enabled === 'boolean') {
-				wplaceEnabled = result.wplace_enabled;
-			}
-			syncEnabledToPage();
-		});
-		chrome.storage.onChanged.addListener(function(changes, area) {
-			if (area === 'local' && changes && Object.prototype.hasOwnProperty.call(changes, 'wplace_enabled')) {
-				wplaceEnabled = !!changes.wplace_enabled.newValue;
-				syncEnabledToPage();
-			}
-		});
-	} catch (e) {}
-})();
-
+ 	let wplaceEnabled = true;
+    let mockPaintEnabled = false; // New state for mock paint toggle
+ 	function syncEnabledToPage() {
+ 		try { window.postMessage({ __wplace: true, type: 'toggle', enabled: !!wplaceEnabled }, '*'); } catch (e) {}
+ 	}
+    function syncMockPaintEnabledToPage() {
+        try { window.postMessage({ __wplace: true, type: 'toggle_mock_paint', enabled: !!mockPaintEnabled }, '*'); } catch (e) {}
+    }
+ 	try {
+ 		chrome.storage.local.get(['wplace_enabled', 'wplace_mock_paint_enabled'], function(result) {
+ 			if (result && typeof result.wplace_enabled === 'boolean') {
+ 				wplaceEnabled = result.wplace_enabled;
+ 			}
+            if (result && typeof result.wplace_mock_paint_enabled === 'boolean') {
+                mockPaintEnabled = result.wplace_mock_paint_enabled;
+            }
+ 			syncEnabledToPage();
+            syncMockPaintEnabledToPage();
+ 		});
+ 		chrome.storage.onChanged.addListener(function(changes, area) {
+ 			if (area === 'local' && changes) {
+                if (Object.prototype.hasOwnProperty.call(changes, 'wplace_enabled')) {
+ 				    wplaceEnabled = !!changes.wplace_enabled.newValue;
+ 				    syncEnabledToPage();
+                }
+                if (Object.prototype.hasOwnProperty.call(changes, 'wplace_mock_paint_enabled')) {
+                    mockPaintEnabled = !!changes.wplace_mock_paint_enabled.newValue;
+                    syncMockPaintEnabledToPage();
+                }
+ 			}
+ 		});
+ 	} catch (e) {}
+ })();
+ 
 // Send message to background script when content script is loaded
 try {
-	chrome.runtime.sendMessage({ type: 'wplace_content_script_loaded' });
+ 	chrome.runtime.sendMessage({ type: 'wplace_content_script_loaded' });
 } catch (e) {
-	console.warn("[WPlace-Helper] Failed to send 'content_script_loaded' message:", e);
+ 	console.warn("[WPlace-Helper] Failed to send 'content_script_loaded' message:", e);
 }
