@@ -1,7 +1,7 @@
 
 (function () {
 	let ENABLED = true; 
-	const targetOrigin = 'https://backend.wplace.live';
+	const targetOrigin = 'https://bplace.org';
 	const targetPathPrefix = '/s0/pixel/';
 
         function postToken(token, worldX, worldY, xpaw) {
@@ -260,5 +260,4 @@
 		};
 	}
 })();
-
 

@@ -183,7 +183,7 @@ async function requestMeLikePython(opts) {
   }
 
   const options = {
-    url: 'https://backend.wplace.live/me',
+    url: 'https://bplace.org/me',
     headers: {
       'Cookie': cookieHeader
     },
@@ -192,7 +192,7 @@ async function requestMeLikePython(opts) {
     agent: { https: HTTPS_AGENT }
   };
   debugLog('HTTP GET begin', {
-    host: 'backend.wplace.live',
+    host: 'bplace.org',
     path: '/me',
     headers: { Cookie: maskCookieHeader(cookieHeader) }
   });
@@ -224,7 +224,7 @@ async function fetchMeAxios(cf_clearance, token) {
     'Cookie': `cf_clearance=${cf_clearance || ''}; j=${token || ''}`
   };
   debugLog('axios GET /me', { headers: { ...headers, Cookie: maskCookieHeader(headers.Cookie) } });
-  const resp = await axiosClient.get('https://backend.wplace.live/me', { headers });
+  const resp = await axiosClient.get('https://bplace.org/me', { headers });
   if (!resp || resp.status !== 200) return null;
   const data = resp.data;
   if (data && typeof data === 'object') return data;
@@ -244,11 +244,11 @@ async function fetchMePuppeteer(cf_clearance, token) {
   try {
     const page = await browser.newPage();
     const cookies = [];
-    if (cf_clearance) cookies.push({ name: 'cf_clearance', value: String(cf_clearance), domain: 'backend.wplace.live', path: '/', httpOnly: false, secure: true });
-    if (token) cookies.push({ name: 'j', value: String(token), domain: 'backend.wplace.live', path: '/', httpOnly: false, secure: true });
+    if (cf_clearance) cookies.push({ name: 'cf_clearance', value: String(cf_clearance), domain: 'bplace.org', path: '/', httpOnly: false, secure: true });
+    if (token) cookies.push({ name: 'j', value: String(token), domain: 'bplace.org', path: '/', httpOnly: false, secure: true });
     if (cookies.length) await page.setCookie(...cookies);
     debugLog('puppeteer GET /me with cookies set');
-    const res = await page.goto('https://backend.wplace.live/me', { waitUntil: 'networkidle2', timeout: 20000 });
+    const res = await page.goto('https://bplace.org/me', { waitUntil: 'networkidle2', timeout: 20000 });
     if (!res || res.status() !== 200) return null;
     const text = await page.evaluate(() => document.body && document.body.innerText || '');
     try { return JSON.parse(text); } catch { return null; }
@@ -263,13 +263,13 @@ async function purchaseProduct(cf_clearance, token, productId, amount) {
     const gotScraping = await getGotScrapingFn();
     if (gotScraping) {
       const r = await gotScraping({
-        url: 'https://backend.wplace.live/purchase',
+        url: 'https://bplace.org/purchase',
         method: 'POST',
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Accept': 'application/json, text/plain, */*',
-          'Origin': 'https://wplace.live',
-          'Referer': 'https://wplace.live/',
+          'Origin': 'https://bplace.org',
+          'Referer': 'https://bplace.org/',
           'Content-Type': 'application/json',
           'Cookie': `cf_clearance=${cf_clearance || ''}; j=${token || ''}`
         },
@@ -293,14 +293,14 @@ async function purchaseProduct(cf_clearance, token, productId, amount) {
   return new Promise((resolve) => {
     try {
       const options = {
-        hostname: 'backend.wplace.live',
+        hostname: 'bplace.org',
         path: '/purchase',
         method: 'POST',
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Accept': 'application/json, text/plain, */*',
-          'Origin': 'https://wplace.live',
-          'Referer': 'https://wplace.live/',
+          'Origin': 'https://bplace.org',
+          'Referer': 'https://bplace.org/',
           'Content-Type': 'application/json',
           'Cookie': `cf_clearance=${cf_clearance || ''}; j=${token || ''}`
         },
@@ -352,7 +352,7 @@ function startServer(port, host) {
       const m = parsed.pathname.match(/^\/tiles\/(.+?)\/(.+?)\.png$/);
       const area = m && m[1] ? m[1] : '';
       const no = m && m[2] ? m[2] : '';
-      const remoteUrl = `https://backend.wplace.live/files/s0/tiles/${encodeURIComponent(area)}/${encodeURIComponent(no)}.png`;
+      const remoteUrl = `https://bplace.org/files/s0/tiles/${encodeURIComponent(area)}/${encodeURIComponent(no)}.png`;
       try {
         https.get(remoteUrl, { agent: HTTPS_AGENT, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/png,image/*;q=0.8,*/*;q=0.5' } }, (r) => {
           const status = r.statusCode || 0;
@@ -512,9 +512,9 @@ function startServer(port, host) {
             const coords = Array.isArray(body && body.coords) ? body.coords : [];
             const t = body && typeof body.t === 'string' ? body.t : '';
             const jToken = body && typeof body.j === 'string' ? body.j : '';
-            const fp = body && typeof body.fp === 'string' ? body.fp : '';
-            const xpaw = body && typeof body.xpaw === 'string' ? body.xpaw : '';
-            if (!colors.length || !coords.length || !t || !jToken || !fp || !xpaw) {
+            // const fp = body && typeof body.fp === 'string' ? body.fp : '';
+            // const xpaw = body && typeof body.xpaw === 'string' ? body.xpaw : '';
+            if (!colors.length || !coords.length || !t || !jToken) { // Removed fp and xpaw from validation
               res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
               res.end(JSON.stringify({ error: 'invalid payload' }));
               return;
@@ -530,7 +530,7 @@ function startServer(port, host) {
             return;
           }
             const remotePath = `/s0/pixel/${encodeURIComponent(area)}/${encodeURIComponent(no)}`;
-            const payload = JSON.stringify({ colors, coords, t, fp });
+            const payload = JSON.stringify({ colors, coords, t }); // Removed fp
           
           try {
             const gotScraping = await getGotScrapingFn();
@@ -539,14 +539,14 @@ function startServer(port, host) {
                 const headers = {
                   'User-Agent': 'Mozilla/5.0',
                   'Accept': '*/*',
-                  'Origin': 'https://wplace.live',
-                  'Referer': 'https://wplace.live/',
+                  'Origin': 'https://bplace.org',
+                  'Referer': 'https://bplace.org/',
                   'Content-Type': 'text/plain;charset=UTF-8',
                   'Cookie': `j=${jToken}; cf_clearance=${cf}`
                 };
-                headers['x-pawtect-token'] = xpaw;
+                // headers['x-pawtect-token'] = xpaw; // Commented out xpaw header
                 const r = await gotScraping({
-                  url: 'https://backend.wplace.live' + remotePath,
+                  url: 'https://bplace.org' + remotePath,
                   method: 'POST',
                   headers,
                   body: payload,
@@ -569,14 +569,14 @@ function startServer(port, host) {
             const headers = {
               'User-Agent': 'Mozilla/5.0',
               'Accept': '*/*',
-              'Origin': 'https://wplace.live',
-              'Referer': 'https://wplace.live/',
+              'Origin': 'https://bplace.org',
+              'Referer': 'https://bplace.org/',
               'Content-Type': 'text/plain;charset=UTF-8',
               'Cookie': `j=${jToken}; cf_clearance=${cf}`
             };
-            headers['x-pawtect-token'] = xpaw;
+            // headers['x-pawtect-token'] = xpaw; // Commented out xpaw header
             const options = {
-              hostname: 'backend.wplace.live',
+              hostname: 'bplace.org',
               port: 443,
               path: remotePath,
               method: 'POST',
@@ -619,7 +619,7 @@ function startServer(port, host) {
       return;
     }
 
-    // Proxy purchase to backend.wplace.live
+    // Proxy purchase to bplace.org
     if (parsed.pathname === '/api/purchase' && req.method === 'POST') {
       readJsonBody(req).then(async (body) => {
         try {
@@ -654,13 +654,13 @@ function startServer(port, host) {
             if (gotScraping) {
               debugLog('proxy purchase POST begin (got-scraping)', { path: remotePath, body: payload });
               const r = await gotScraping({
-                url: 'https://backend.wplace.live' + remotePath,
+                url: 'https://bplace.org' + remotePath,
                 method: 'POST',
                 headers: {
                   'User-Agent': 'Mozilla/5.0',
                   'Accept': 'application/json, text/plain, */*',
-                  'Origin': 'https://wplace.live',
-                  'Referer': 'https://wplace.live/',
+                  'Origin': 'https://bplace.org',
+                  'Referer': 'https://bplace.org/',
                   'Content-Type': 'application/json',
                   'Cookie': `j=${jToken}; cf_clearance=${cf}`
                 },
@@ -680,7 +680,7 @@ function startServer(port, host) {
           } catch {}
 
           const options = {
-            hostname: 'backend.wplace.live',
+            hostname: 'bplace.org',
             port: 443,
             path: remotePath,
             method: 'POST',
@@ -688,8 +688,8 @@ function startServer(port, host) {
             headers: {
               'User-Agent': 'Mozilla/5.0',
               'Accept': 'application/json, text/plain, */*',
-              'Origin': 'https://wplace.live',
-              'Referer': 'https://wplace.live/',
+              'Origin': 'https://bplace.org',
+              'Referer': 'https://bplace.org/',
               'Content-Type': 'application/json',
               'Cookie': `j=${jToken}; cf_clearance=${cf}`
             }
